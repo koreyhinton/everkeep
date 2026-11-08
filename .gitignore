@@ -1,0 +1,8 @@
+# Emacs autosave files
+\#*\#
+.\#*
+*~
+
+# Third-party art (licenses forbid redistribution) - keep out of the public repo
+assets/*
+!assets/.gitkeep

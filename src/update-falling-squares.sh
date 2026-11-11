@@ -13,7 +13,8 @@ cat << EOF
             x: rand::gen_range(size / 2.0, screen_width() - size / 2.0),
             y: -size,
             x_dir: 0.0,
-            y_dir: 1.0
+            y_dir: 1.0,
+            collided: false,
         });
     }
 

@@ -32,26 +32,25 @@ cat << EOF
             let mut y_dir: f32 = 0.0;
 
             if is_key_down(KeyCode::Right) {
-                x_dir = 1.0;
+                x_dir += 1.0;
             }
             if is_key_down(KeyCode::Left) {
-                x_dir = -1.0;
+                x_dir += -1.0;
             }
             if is_key_down(KeyCode::Down) {
-                y_dir = 1.0;
+                y_dir += 1.0;
             }
             if is_key_down(KeyCode::Up) {
-                y_dir = -1.0;
+                y_dir += -1.0;
             }
 
-            if x_dir != 0.0 {
-                ` ./distance.sh ${v}dist_x_ `
-            }
-            if y_dir != 0.0 {
-                ` ./distance.sh ${v}dist_y_ `
-            }
+            ` ./distance.sh ${v}dist_x_ `
+            ` ./distance.sh ${v}dist_y_ `
 
             println!("{x}, {y}");
+
+            x = clamp(x, 0.0, screen_width());
+            y = clamp(y, 0.0, screen_height());
 
             draw_circle(x, y, 16.0, YELLOW);
 

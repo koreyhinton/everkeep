@@ -2,10 +2,10 @@
 
 v=$1
 # maps
-. ${NSMAP}/bind ${v} Vel T D
+. ${NSMAP}/bind ${v} Vel T D Dir
 
 cat << EOF
 
-    ${!d} += ${!vel} * ${!t};
+    ${!d} += ${!dir} * (${!vel} * ${!t});
 
 EOF

@@ -14,6 +14,9 @@ export ${v}dir_Circ=circle
 export ${v}fall_Squares=squares
 export ${v}fall_DeltaT=t
 export ${v}drawsq_Squares=squares
+export ${v}go_Squares=squares
+export ${v}go_Circ=circle
+export ${v}go_GameOver=gameover
 
 cat << EOF
 
@@ -28,20 +31,6 @@ cat << EOF
         y: f32,
         x_dir: f32,
         y_dir: f32
-    }
-
-    impl Shape {
-        fn collides_with(&self, other: &Self) -> bool {
-            self.rect().overlaps(&other.rect())
-        }
-        fn rect(&self) -> Rect {
-            Rect {
-                x: self.x - self.size / 2.0,
-                y: self.y - self.size / 2.0,
-                w: self.size,
-                h: self.size,
-            }
-        }
     }
 
     #[macroquad::main("EverKeep")]
@@ -75,9 +64,7 @@ cat << EOF
 
                 println!("{x},{y}", x = circle.x, y = circle.y);
 
-                if squares.iter().any(|square| circle.collides_with(square)) {
-                    gameover = true;
-                }
+                ` ./update-game-over-collision.sh ${v}go_ `
             }
 
             if gameover && is_key_pressed(KeyCode::Space) {

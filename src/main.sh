@@ -31,10 +31,14 @@ export ${v}bullcoll_bull_rect_Shape=bullet
 export ${v}drawsc_Score=score
 export ${v}drawsc_HighScore=high_score
 
+export ${v}explod_Square=square
+export ${v}explod_Explosions=explosions
+
 cat << EOF
 
     #![allow(non_snake_case)]
 
+    use macroquad_particles::{ColorCurve, Emitter, EmitterConfig};
     use quad_storage::STORAGE;
     use macroquad::prelude::*;
 
@@ -87,6 +91,7 @@ cat << EOF
             .unwrap_or(0);
 
         let mut squares = vec![];
+        let mut explosions: Vec<(Emitter, Vec2)> = vec![];
         let mut bullets: Vec<Shape> = vec![];
         let mut circle = Shape {
             size: 32.0,
@@ -147,6 +152,7 @@ cat << EOF
                         // restart the game
                         squares.clear();
                         bullets.clear();
+                        explosions.clear();
                         circle.x = screen_width() / 2.0;
                         circle.y = screen_height() / 2.0;
                         score = 0;
@@ -175,9 +181,11 @@ cat << EOF
                                 square.collided = true;
                                 score += square.size.round() as u32;
                                 high_score = high_score.max(score);
+                                ` ./update-explosions.sh ${v}explod_ `
                             }
                         }
                     }
+                    explosions.retain(|(explosion, _)| explosion.config.emitting);
     
                     println!("{x},{y}", x = circle.x, y = circle.y);
     
@@ -224,6 +232,9 @@ cat << EOF
                     }
                     draw_circle(circle.x, circle.y, circle.size / 2.0, YELLOW);
                     ` ./draw-squares.sh ${v}drawsq_ `
+                    for (explosion, coords) in explosions.iter_mut() {
+                        explosion.draw(*coords);
+                    }
                 }
                 GameState::Paused => {
                     let text = "Paused";

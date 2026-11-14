@@ -53,7 +53,7 @@ cat << EOF
     use quad_storage::STORAGE;
     use macroquad::experimental::animation::{AnimatedSprite, Animation};
     use macroquad::audio::{load_sound, play_sound, play_sound_once, PlaySoundParams};
-    use macroquad::ui::{hash, root_ui, Skin};
+    use macroquad::ui::{hash, root_ui, widgets::Window, Skin};
     use macroquad::prelude::*;
 
     const FRAGMENT_SHADER: &str = include_str!("starfield-shader.glsl");
@@ -360,17 +360,19 @@ cat << EOF
             // Draw
             match game_state {
                 GameState::MainMenu => {
-                    root_ui().window(
+                    let mut ui = root_ui();
+                    let window = Window::new(
                         hash!(),
                         vec2(
                             screen_width() / 2.0 - window_size.x / 2.0,
                             screen_height() / 2.0 - window_size.y / 2.0,
                         ),
                         window_size,
-                        |ui| {
-                            ` ./ui-button-callback.sh ${v}uipress_ `
-                        },
-                    );
+                    )
+                    .titlebar(false)
+                    .begin(&mut *ui);
+                    ` ./draw-ui.sh ${v}uipress_ `
+                    window.end(&mut *ui);
                 }
                 GameState::Playing => {
                     let bullet_frame = bullet_sprite.frame();

@@ -23,7 +23,7 @@ export ${v}circ_rect_Shape=circle
 export ${v}sq_rect_Shape=sq
 export ${v}go_SquareRect=${v}sq_rect_Rect
 export ${v}go_CircRect=${v}circ_rect_Rect
-export ${v}go_GameOver=gameover
+export ${v}go_GameState=game_state
 
 export ${v}bullcoll_sq_rect_Shape=square
 export ${v}bullcoll_bull_rect_Shape=bullet
@@ -37,6 +37,14 @@ cat << EOF
 
     use quad_storage::STORAGE;
     use macroquad::prelude::*;
+
+    enum GameState {
+        MainMenu,
+        Playing,
+        Paused,
+        CrashFrame,
+        GameOver,
+    }
 
     struct Shape {
         size: f32,
@@ -52,7 +60,7 @@ cat << EOF
     async fn main() {
         rand::srand(miniquad::date::now() as u64);
         let vel: f32 = 200.0;
-        let mut gameover = false;
+        let mut game_state = GameState::MainMenu;
         let storage = &mut STORAGE.lock().unwrap();
 
         let mut score: u32 = 0;
@@ -77,67 +85,121 @@ cat << EOF
 
             // Update Model (also based on Key Presses)
             let t = get_frame_time();
-            if !gameover {
-                ` ./update-falling-squares.sh ${v}fall_ `
-                ` ./update-circle-dir.sh ${v}dir_ `
-                ` ./distance.sh ${v}dist_x_ `
-                ` ./distance.sh ${v}dist_y_ `
-                circle.x = clamp(circle.x, 0.0, screen_width());
-                circle.y = clamp(circle.y, 0.0, screen_height());
-                ` ./update-bullets-and-squares.sh ${v}bulls_ `
-                for square in squares.iter_mut() {
-                    ` ./get-rect.sh ${v}bullcoll_sq_rect_ `
-                    for bullet in bullets.iter_mut() {
-                        ` ./get-rect.sh ${v}bullcoll_bull_rect_ `
-                        if ${v}bullcoll_bull_rect_Rect.overlaps(&${v}bullcoll_sq_rect_Rect) {
-                            bullet.collided = true;
-                            square.collided = true;
-                            score += square.size.round() as u32;
-                            high_score = high_score.max(score);
-                        }
+
+            match game_state {
+                GameState::MainMenu => {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if is_key_pressed(KeyCode::Escape) {
+                        std::process::exit(0);
+                    }
+                    if is_key_pressed(KeyCode::Space) {
+                        // restart the game
+                        squares.clear();
+                        bullets.clear();
+                        circle.x = screen_width() / 2.0;
+                        circle.y = screen_height() / 2.0;
+                        score = 0;
+                        game_state = GameState::Playing;
                     }
                 }
-
-                println!("{x},{y}", x = circle.x, y = circle.y);
-
-                ` ./get-rect.sh ${v}circ_rect_ `
-                for sq in &squares {
-                    ` ./get-rect.sh ${v}sq_rect_ `
-                    ` ./update-game-over-collision.sh ${v}go_ `
+                GameState::Playing => 'playing: {
+                    if is_key_pressed(KeyCode::Escape) {
+                        game_state = GameState::Paused;
+                        break 'playing; // pause skips collision til it resumes
+                    }
+                    ` ./update-falling-squares.sh ${v}fall_ `
+                    ` ./update-circle-dir.sh ${v}dir_ `
+                    ` ./distance.sh ${v}dist_x_ `
+                    ` ./distance.sh ${v}dist_y_ `
+                    circle.x = clamp(circle.x, 0.0, screen_width());
+                    circle.y = clamp(circle.y, 0.0, screen_height());
+                    ` ./update-bullets-and-squares.sh ${v}bulls_ `
+                    for square in squares.iter_mut() {
+                        ` ./get-rect.sh ${v}bullcoll_sq_rect_ `
+                        for bullet in bullets.iter_mut() {
+                            ` ./get-rect.sh ${v}bullcoll_bull_rect_ `
+                            if ${v}bullcoll_bull_rect_Rect.overlaps(&${v}bullcoll_sq_rect_Rect) {
+                                bullet.collided = true;
+                                square.collided = true;
+                                score += square.size.round() as u32;
+                                high_score = high_score.max(score);
+                            }
+                        }
+                    }
+    
+                    println!("{x},{y}", x = circle.x, y = circle.y);
+    
+                    ` ./get-rect.sh ${v}circ_rect_ `
+                    for sq in &squares {
+                        ` ./get-rect.sh ${v}sq_rect_ `
+                        ` ./update-game-over-collision.sh ${v}go_ `
+                    }
                 }
-                if gameover && score == high_score {
-                    storage.set("highscore.dat", &high_score.to_string());
+                GameState::Paused => {
+                    if is_key_pressed(KeyCode::Space) {
+                        game_state = GameState::Playing;
+                    }
                 }
-            }
-
-            if gameover && is_key_pressed(KeyCode::Space) {
-                // restart the game
-                squares.clear();
-                bullets.clear();
-                circle.x = screen_width() / 2.0;
-                circle.y = screen_height() / 2.0;
-                gameover = false;
-                score = 0;
+                GameState::CrashFrame => {
+                    if score == high_score {
+                        storage.set("highscore.dat", &high_score.to_string());
+                    }
+                    game_state = GameState::GameOver
+                }
+                GameState::GameOver => {
+                    if is_key_pressed(KeyCode::Space) {
+                        game_state = GameState::MainMenu;
+                    }
+                }
             }
 
             // Draw
-            for bullet in &bullets {
-                draw_circle(bullet.x, bullet.y, bullet.size / 2.0, RED);
-            }
-            draw_circle(circle.x, circle.y, circle.size / 2.0, YELLOW);
-            ` ./draw-squares.sh ${v}drawsq_ `
-            if gameover {
-                let text = "GAME OVER!";
-                let text_dimensions = measure_text(text, None, 50, 1.0);
-                draw_text(
-                    text,
-                    screen_width() / 2.0 - text_dimensions.width / 2.0,
-                    screen_height() / 2.0,
-                    50.0,
-                    RED,
-                );
+            match game_state {
+                GameState::MainMenu => {
+                    let text = "Press space";
+                    let text_dimensions = measure_text(text, None, 50, 1.0);
+                    draw_text(
+                        text,
+                        screen_width() / 2.0 - text_dimensions.width / 2.0,
+                        screen_height() / 2.0 - text_dimensions.height / 2.0,
+                        50.0,
+                        WHITE,
+                    );
+                }
+                GameState::Playing => {
+                    for bullet in &bullets {
+                        draw_circle(bullet.x, bullet.y, bullet.size / 2.0, RED);
+                    }
+                    draw_circle(circle.x, circle.y, circle.size / 2.0, YELLOW);
+                    ` ./draw-squares.sh ${v}drawsq_ `
+                }
+                GameState::Paused => {
+                    let text = "Paused";
+                    let text_dimensions = measure_text(text, None, 50, 1.0);
+                    draw_text(
+                        text,
+                        screen_width() / 2.0 - text_dimensions.width / 2.0,
+                        screen_height() / 2.0 - text_dimensions.height / 2.0,
+                        50.0,
+                        WHITE,
+                    );
+                }
+                GameState::CrashFrame => {
+                }
+                GameState::GameOver => {
+                    let text = "GAME OVER!";
+                    let text_dimensions = measure_text(text, None, 50, 1.0);
+                    draw_text(
+                        text,
+                        screen_width() / 2.0 - text_dimensions.width / 2.0,
+                        screen_height() / 2.0,
+                        50.0,
+                        RED,
+                    );
+                }
             }
             ` ./draw-score.sh ${v}drawsc_ `
+
 
             next_frame().await
         }

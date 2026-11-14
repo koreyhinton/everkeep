@@ -2,12 +2,12 @@
 
 v=$1
 # maps
-. ${NSMAP}/bind ${v} SquareRect CircRect GameOver
+. ${NSMAP}/bind ${v} SquareRect CircRect GameState
 
 cat << EOF
 
     if ${!circ_rect}.overlaps(&${!square_rect}) {
-        ${!game_over} = true;
+        ${!game_state} = GameState::CrashFrame;
         break;
     }
 

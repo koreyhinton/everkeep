@@ -28,10 +28,14 @@ export ${v}go_GameOver=gameover
 export ${v}bullcoll_sq_rect_Shape=square
 export ${v}bullcoll_bull_rect_Shape=bullet
 
+export ${v}drawsc_Score=score
+export ${v}drawsc_HighScore=high_score
+
 cat << EOF
 
     #![allow(non_snake_case)]
 
+    use std::fs;
     use macroquad::prelude::*;
 
     struct Shape {
@@ -49,6 +53,11 @@ cat << EOF
         rand::srand(miniquad::date::now() as u64);
         let vel: f32 = 200.0;
         let mut gameover = false;
+
+        let mut score: u32 = 0;
+        let mut high_score: u32 = fs::read_to_string("highscore.dat")
+            .map_or(Ok(0), |i| i.parse::<u32>())
+            .unwrap_or(0);
 
         let mut squares = vec![];
         let mut bullets: Vec<Shape> = vec![];
@@ -82,6 +91,8 @@ cat << EOF
                         if ${v}bullcoll_bull_rect_Rect.overlaps(&${v}bullcoll_sq_rect_Rect) {
                             bullet.collided = true;
                             square.collided = true;
+                            score += square.size.round() as u32;
+                            high_score = high_score.max(score);
                         }
                     }
                 }
@@ -93,14 +104,19 @@ cat << EOF
                     ` ./get-rect.sh ${v}sq_rect_ `
                     ` ./update-game-over-collision.sh ${v}go_ `
                 }
+                if gameover && score == high_score {
+                    fs::write("highscore.dat", high_score.to_string()).ok();
+                }
             }
 
             if gameover && is_key_pressed(KeyCode::Space) {
+                // restart the game
                 squares.clear();
                 bullets.clear();
                 circle.x = screen_width() / 2.0;
                 circle.y = screen_height() / 2.0;
                 gameover = false;
+                score = 0;
             }
 
             // Draw
@@ -120,6 +136,7 @@ cat << EOF
                     RED,
                 );
             }
+            ` ./draw-score.sh ${v}drawsc_ `
 
             next_frame().await
         }

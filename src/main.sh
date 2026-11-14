@@ -34,12 +34,13 @@ export ${v}drawsc_HighScore=high_score
 
 export ${v}explod_Square=square
 export ${v}explod_Explosions=explosions
+export ${v}explod_ExplosionTexture=explosion_texture
 
 cat << EOF
 
     #![allow(non_snake_case)]
 
-    use macroquad_particles::{ColorCurve, Emitter, EmitterConfig};
+    use macroquad_particles::{AtlasConfig, Emitter, EmitterConfig};
     use quad_storage::STORAGE;
     use macroquad::experimental::animation::{AnimatedSprite, Animation};
     use macroquad::prelude::*;
@@ -176,6 +177,10 @@ cat << EOF
             ],
             true,
         );
+        let explosion_texture: Texture2D = load_texture("explosion.png")
+            .await
+            .expect("Couldn't load file");
+        explosion_texture.set_filter(FilterMode::Nearest);
         build_textures_atlas();
 
         loop {

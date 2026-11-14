@@ -35,7 +35,7 @@ cat << EOF
 
     #![allow(non_snake_case)]
 
-    use std::fs;
+    use quad_storage::STORAGE;
     use macroquad::prelude::*;
 
     struct Shape {
@@ -53,9 +53,10 @@ cat << EOF
         rand::srand(miniquad::date::now() as u64);
         let vel: f32 = 200.0;
         let mut gameover = false;
+        let storage = &mut STORAGE.lock().unwrap();
 
         let mut score: u32 = 0;
-        let mut high_score: u32 = fs::read_to_string("highscore.dat")
+        let mut high_score: u32 = storage.get("highscore.dat")
             .map_or(Ok(0), |i| i.parse::<u32>())
             .unwrap_or(0);
 
@@ -105,7 +106,7 @@ cat << EOF
                     ` ./update-game-over-collision.sh ${v}go_ `
                 }
                 if gameover && score == high_score {
-                    fs::write("highscore.dat", high_score.to_string()).ok();
+                    storage.set("highscore.dat", &high_score.to_string());
                 }
             }
 

@@ -16,3 +16,9 @@ assets/*
 # orc-generated files
 /src/main.rs
 /src/main.rs.tmp
+
+# quad_storage
+local.data
+
+# target wasm copied adjacent to index.html
+everkeep.wasm

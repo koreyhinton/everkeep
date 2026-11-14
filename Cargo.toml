@@ -7,3 +7,4 @@ edition = "2024"
 
 [dependencies]
 macroquad = "0.4.16"
+quad-storage = "0.1.0"

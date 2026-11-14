@@ -2,7 +2,7 @@
 
 v=$1
 # maps
-. ${NSMAP}/bind ${v} Circ Bullets Squares DeltaT
+. ${NSMAP}/bind ${v} Circ Bullets Squares DeltaT ShootSound
 
 cat << EOF
     if is_key_pressed(KeyCode::Space) {
@@ -15,6 +15,7 @@ cat << EOF
             size: 32.0,
             collided: false
         });
+        play_sound_once(&${!shoot_sound});
     }
 
     for bullet in &mut ${!bullets} {

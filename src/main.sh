@@ -19,6 +19,7 @@ export ${v}bulls_Circ=circle
 export ${v}bulls_Bullets=bullets
 export ${v}bulls_DeltaT=t
 export ${v}bulls_Squares=squares
+export ${v}bulls_ShootSound=sound_laser
 
 export ${v}circ_rect_Shape=circle
 export ${v}sq_rect_Shape=sq
@@ -43,6 +44,7 @@ cat << EOF
     use macroquad_particles::{AtlasConfig, Emitter, EmitterConfig};
     use quad_storage::STORAGE;
     use macroquad::experimental::animation::{AnimatedSprite, Animation};
+    use macroquad::audio::{load_sound, play_sound, play_sound_once, PlaySoundParams};
     use macroquad::prelude::*;
 
     const FRAGMENT_SHADER: &str = include_str!("starfield-shader.glsl");
@@ -198,6 +200,18 @@ cat << EOF
         explosion_texture.set_filter(FilterMode::Nearest);
         build_textures_atlas();
 
+        let theme_music = load_sound("8bit-spaceshooter.ogg").await.unwrap();
+        let sound_explosion = load_sound("explosion.wav").await.unwrap();
+        let sound_laser = load_sound("laser.wav").await.unwrap();
+
+        play_sound(
+            &theme_music,
+            PlaySoundParams {
+                looped: true,
+                volume: 1.,
+            },
+        );
+
         loop {
             // Clear
             clear_background(BLACK);
@@ -262,6 +276,7 @@ cat << EOF
                                 score += square.size.round() as u32;
                                 high_score = high_score.max(score);
                                 ` ./update-explosions.sh ${v}explod_ `
+                                play_sound_once(&sound_explosion);
                             }
                         }
                     }

@@ -1,0 +1,6 @@
+# sapp-jsutils and quad-storage-sys declare their JS functions without
+# #[link(wasm_import_module)], and newer Rust no longer lets wasm32 link with
+# undefined symbols by default. Allow them so they become "env" imports that
+# the JS plugins in index.html provide at load time.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "link-arg=--allow-undefined"]

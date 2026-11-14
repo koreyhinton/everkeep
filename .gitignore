@@ -6,3 +6,19 @@
 # Third-party art (licenses forbid redistribution) - keep out of the public repo
 assets/*
 !assets/.gitkeep
+
+
+# Added by cargo
+
+/target
+
+
+# orc-generated files
+/src/main.rs
+/src/main.rs.tmp
+
+# quad_storage
+local.data
+
+# target wasm copied adjacent to index.html
+everkeep.wasm

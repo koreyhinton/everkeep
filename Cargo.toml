@@ -1,0 +1,14 @@
+[package]
+name = "everkeep"
+version = "0.1.0"
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+macroquad = { version = "0.4.16", features = ["audio"] }
+macroquad-particles = "0.2.2"
+quad-storage = "0.1.0"
+
+[profile.dev.package.'*']
+opt-level = 3

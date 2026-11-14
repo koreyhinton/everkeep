@@ -128,6 +128,21 @@ cat << EOF
         let ship_texture: Texture2D = load_texture("ship.png").await
             .expect("Couldn't load file");
         ship_texture.set_filter(FilterMode::Nearest);
+        let enemy_small_texture: Texture2D = load_texture("enemy-small.png")
+            .await
+            .expect("Couldn't load file");
+        enemy_small_texture.set_filter(FilterMode::Nearest);
+        let mut enemy_small_sprite = AnimatedSprite::new(
+            17,
+            16,
+            &[Animation {
+                name: "enemy_small".to_string(),
+                row: 0,
+                frames: 2, // column count
+                fps: 12,
+            }],
+            true,
+        );
         let bullet_texture: Texture2D = load_texture("laser-bolts.png")
             .await
             .expect("Couldn't load file");
@@ -235,6 +250,7 @@ cat << EOF
                     circle.y = clamp(circle.y, 0.0, screen_height());
                     ` ./update-bullets-and-squares.sh ${v}bulls_ `
                     ship_sprite.update();
+                    enemy_small_sprite.update();
                     bullet_sprite.update();
                     for square in squares.iter_mut() {
                         ` ./get-rect.sh ${v}bullcoll_sq_rect_ `
@@ -317,6 +333,7 @@ cat << EOF
                             ..Default::default()
                         },
                     );
+                    let ${v}drawsq_EnemyFrame = enemy_small_sprite.frame();
                     ` ./draw-squares.sh ${v}drawsq_ `
                     for (explosion, coords) in explosions.iter_mut() {
                         explosion.draw(*coords);

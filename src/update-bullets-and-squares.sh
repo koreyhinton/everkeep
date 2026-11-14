@@ -8,11 +8,11 @@ cat << EOF
     if is_key_pressed(KeyCode::Space) {
         ${!bullets}.push(Shape {
             x: ${!circ}.x,
-            y: ${!circ}.y,
+            y: ${!circ}.y - 24.0,
             x_dir: 0.0,
             y_dir: 0.0,
             speed: ${!circ}.speed * 2.0,
-            size: 5.0,
+            size: 32.0,
             collided: false
         });
     }

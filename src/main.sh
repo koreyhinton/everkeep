@@ -38,6 +38,24 @@ cat << EOF
     use quad_storage::STORAGE;
     use macroquad::prelude::*;
 
+    const FRAGMENT_SHADER: &str = include_str!("starfield-shader.glsl");
+
+    const VERTEX_SHADER: &str = "#version 100
+    attribute vec3 position;
+    attribute vec2 texcoord;
+    attribute vec4 color0;
+    varying float iTime;
+
+    uniform mat4 Model;
+    uniform mat4 Projection;
+    uniform vec4 _Time;
+
+    void main() {
+        gl_Position = Projection * Model * vec4(position, 1);
+        iTime = _Time.x;
+    }
+    ";
+
     enum GameState {
         MainMenu,
         Playing,
@@ -79,9 +97,42 @@ cat << EOF
             y_dir: 0.0,
             collided: false,
         };
+
+        let mut direction_modifier: f32 = 0.0;
+        let render_target = render_target(320, 150);
+        render_target.texture.set_filter(FilterMode::Nearest);
+        let material = load_material(
+            ShaderSource::Glsl {
+                vertex: VERTEX_SHADER,
+                fragment: FRAGMENT_SHADER,
+            },
+            MaterialParams {
+                uniforms: vec![
+                    UniformDesc::new("iResolution", UniformType::Float2),
+                    UniformDesc::new("direction_modifier", UniformType::Float1),
+                ],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
         loop {
             // Clear
-            clear_background(DARKPURPLE);
+            clear_background(BLACK);
+            material.set_uniform("iResolution", (screen_width(), screen_height()));
+            material.set_uniform("direction_modifier", direction_modifier);
+            gl_use_material(&material);
+            draw_texture_ex(
+                &render_target.texture,
+                0.,
+                0.,
+                WHITE,
+                DrawTextureParams {
+                    dest_size: Some(vec2(screen_width(), screen_height())),
+                    ..Default::default()
+                },
+            );
+            gl_use_default_material();
 
             // Update Model (also based on Key Presses)
             let t = get_frame_time();
@@ -109,6 +160,7 @@ cat << EOF
                     }
                     ` ./update-falling-squares.sh ${v}fall_ `
                     ` ./update-circle-dir.sh ${v}dir_ `
+                    direction_modifier += 0.05 * t * circle.x_dir;
                     ` ./distance.sh ${v}dist_x_ `
                     ` ./distance.sh ${v}dist_y_ `
                     circle.x = clamp(circle.x, 0.0, screen_width());

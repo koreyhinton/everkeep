@@ -27,5 +27,5 @@ python3 -m http.server
 
 Then open http://localhost:8000. Opening `index.html` straight from disk won't work because browsers block loading the wasm file from `file://`.
 
-License: code is AGPL-3.0 (see LICENSE). Game art is not covered and remains under its own license.
+License: code is AGPL-3.0 (see LICENSE). Game art is not covered and remains under its own license. `src/starfield-shader.glsl` is also not covered: it is the Starfield Tutorial shader by Martijn Steinrucken (The Art of Code), licensed under [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/).
 

@@ -15,11 +15,12 @@ export ${v}dir_Circ=circle
 export ${v}fall_Squares=squares
 export ${v}fall_DeltaT=t
 export ${v}drawsq_Squares=squares
+export ${v}drawsq_EnemyTexture=resources.enemy_small_texture
 export ${v}bulls_Circ=circle
 export ${v}bulls_Bullets=bullets
 export ${v}bulls_DeltaT=t
 export ${v}bulls_Squares=squares
-export ${v}bulls_ShootSound=sound_laser
+export ${v}bulls_ShootSound=resources.sound_laser
 
 export ${v}circ_rect_Shape=circle
 export ${v}sq_rect_Shape=sq
@@ -35,7 +36,7 @@ export ${v}drawsc_HighScore=high_score
 
 export ${v}explod_Square=square
 export ${v}explod_Explosions=explosions
-export ${v}explod_ExplosionTexture=explosion_texture
+export ${v}explod_ExplosionTexture=resources.explosion_texture
 
 export ${v}uipress_Ui=ui
 export ${v}uipress_Sq=squares
@@ -45,6 +46,8 @@ export ${v}uipress_Circ=circle
 export ${v}uipress_Score=score
 export ${v}uipress_GameState=game_state
 
+export ${v}res_Resources=resources
+
 cat << EOF
 
     #![allow(non_snake_case)]
@@ -52,9 +55,14 @@ cat << EOF
     use macroquad_particles::{AtlasConfig, Emitter, EmitterConfig};
     use quad_storage::STORAGE;
     use macroquad::experimental::animation::{AnimatedSprite, Animation};
-    use macroquad::audio::{load_sound, play_sound, play_sound_once, PlaySoundParams};
+    use macroquad::experimental::coroutines::{start_coroutine, Coroutine};
+    use macroquad::audio::{Sound,load_sound, play_sound, play_sound_once, PlaySoundParams};
+    use macroquad::Error;
     use macroquad::ui::{hash, root_ui, widgets::Window, Skin};
     use macroquad::prelude::*;
+
+    // true keeps the loading screen up for at least 2 seconds, to see the spinner
+    const FORCE_VISIBLE_LOAD_SCREEN: bool = true;
 
     const FRAGMENT_SHADER: &str = include_str!("starfield-shader.glsl");
 
@@ -90,6 +98,31 @@ cat << EOF
         x_dir: f32,
         y_dir: f32,
         collided: bool,
+    }
+
+    struct Resources {
+        ship_texture: Texture2D,
+        bullet_texture: Texture2D,
+        explosion_texture: Texture2D,
+        enemy_small_texture: Texture2D,
+        theme_music: Sound,
+        sound_explosion: Sound,
+        sound_laser: Sound,
+        ui_skin: Skin,
+    }
+
+    struct ResourceCoroutines {
+        ship_co: Coroutine<Result<Texture2D, Error>>,
+        bullet_co: Coroutine<Result<Texture2D, Error>>,
+        explosion_co: Coroutine<Result<Texture2D, Error>>,
+        enemy_small_co: Coroutine<Result<Texture2D, Error>>,
+        theme_music_co: Coroutine<Result<Sound, Error>>,
+        sound_explosion_co: Coroutine<Result<Sound, Error>>,
+        sound_laser_co: Coroutine<Result<Sound, Error>>,
+        window_background_co: Coroutine<Result<Image, Error>>,
+        button_background_co: Coroutine<Result<Image, Error>>,
+        button_clicked_background_co: Coroutine<Result<Image, Error>>,
+        font_co: Coroutine<Result<Vec<u8>, Error>>,
     }
 
     #[macroquad::main("EverKeep")]
@@ -136,13 +169,9 @@ cat << EOF
         .unwrap();
 
         set_pc_assets_folder("assets");
-        let ship_texture: Texture2D = load_texture("ship.png").await
-            .expect("Couldn't load file");
-        ship_texture.set_filter(FilterMode::Nearest);
-        let enemy_small_texture: Texture2D = load_texture("enemy-small.png")
-            .await
-            .expect("Couldn't load file");
-        enemy_small_texture.set_filter(FilterMode::Nearest);
+
+        ` ./resources-load-async-loop.sh ${v}res_ `
+
         let mut enemy_small_sprite = AnimatedSprite::new(
             17,
             16,
@@ -154,10 +183,6 @@ cat << EOF
             }],
             true,
         );
-        let bullet_texture: Texture2D = load_texture("laser-bolts.png")
-            .await
-            .expect("Couldn't load file");
-        bullet_texture.set_filter(FilterMode::Nearest);
         let mut bullet_sprite = AnimatedSprite::new(
             16,
             16,
@@ -203,62 +228,16 @@ cat << EOF
             ],
             true,
         );
-        let explosion_texture: Texture2D = load_texture("explosion.png")
-            .await
-            .expect("Couldn't load file");
-        explosion_texture.set_filter(FilterMode::Nearest);
-        build_textures_atlas();
 
-        let theme_music = load_sound("8bit-spaceshooter.ogg").await.unwrap();
-        let sound_explosion = load_sound("explosion.wav").await.unwrap();
-        let sound_laser = load_sound("laser.wav").await.unwrap();
         play_sound(
-            &theme_music,
+            &resources.theme_music,
             PlaySoundParams {
                 looped: true,
                 volume: 1.,
             },
         );
 
-        let window_background = load_image("window_background.png").await.unwrap();
-        let button_background = load_image("button_background.png").await.unwrap();
-        let button_clicked_background = load_image(
-            "button_clicked_background.png"
-        ).await.unwrap();
-        let font = load_file("atari_games.ttf").await.unwrap();
-
-        let window_style = root_ui()
-            .style_builder()
-            .background(window_background)
-            .background_margin(RectOffset::new(32.0, 76.0, 44.0, 20.0))
-            .margin(RectOffset::new(0.0, -40.0, 0.0, 0.0))
-            .build();
-        let button_style = root_ui()
-            .style_builder()
-            .background(button_background)
-            .background_clicked(button_clicked_background)
-            .background_margin(RectOffset::new(16.0, 16.0, 16.0, 16.0))
-            .margin(RectOffset::new(16.0, 0.0, -8.0, -8.0))
-            .font(&font)
-            .unwrap()
-            .text_color(WHITE)
-            .font_size(64)
-            .build();
-        let label_style = root_ui()
-            .style_builder()
-            .font(&font)
-            .unwrap()
-            .text_color(WHITE)
-            .font_size(28)
-            .build();
-
-        let ui_skin = Skin {
-            window_style,
-            button_style,
-            label_style,
-            ..root_ui().default_skin()
-        };
-        root_ui().push_skin(&ui_skin);
+        root_ui().push_skin(&resources.ui_skin);
         let window_size = vec2(370.0, 320.0);
 
         loop {
@@ -325,7 +304,7 @@ cat << EOF
                                 score += square.size.round() as u32;
                                 high_score = high_score.max(score);
                                 ` ./update-explosions.sh ${v}explod_ `
-                                play_sound_once(&sound_explosion);
+                                play_sound_once(&resources.sound_explosion);
                             }
                         }
                     }
@@ -378,7 +357,7 @@ cat << EOF
                     let bullet_frame = bullet_sprite.frame();
                     for bullet in &bullets {
                         draw_texture_ex(
-                            &bullet_texture,
+                            &resources.bullet_texture,
                             bullet.x - bullet.size / 2.0,
                             bullet.y - bullet.size / 2.0,
                             WHITE,
@@ -391,7 +370,7 @@ cat << EOF
                     }
                     let ship_frame = ship_sprite.frame();
                     draw_texture_ex(
-                        &ship_texture,
+                        &resources.ship_texture,
                         circle.x - ship_frame.dest_size.x,
                         circle.y - ship_frame.dest_size.y,
                         WHITE,

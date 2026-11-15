@@ -2,13 +2,13 @@
 
 v=$1
 # maps
-. ${NSMAP}/bind ${v} Squares EnemyFrame
+. ${NSMAP}/bind ${v} Squares EnemyFrame EnemyTexture
 
 cat << EOF
     
     for square in &${!squares} {
         draw_texture_ex(
-            &enemy_small_texture,
+            &${!enemy_texture},
             square.x - square.size / 2.0,
             square.y - square.size / 2.0,
             WHITE,

@@ -7,35 +7,21 @@ v=$1
 cat << EOF
 
     let ${v}ResCo = ResourceCoroutines {
-        ship_co: start_coroutine(load_texture("ship.png")),
-        bullet_co: start_coroutine(load_texture("laser-bolts.png")),
-        explosion_co: start_coroutine(load_texture("explosion.png")),
-        enemy_small_co: start_coroutine(load_texture("enemy-small.png")),
-        theme_music_co: start_coroutine(load_sound("8bit-spaceshooter.ogg")),
-        sound_explosion_co: start_coroutine(load_sound("explosion.wav")),
-        sound_laser_co: start_coroutine(load_sound("laser.wav")),
-        window_background_co: start_coroutine(load_image("window_background.png")),
-        button_background_co: start_coroutine(load_image("button_background.png")),
-        button_clicked_background_co: start_coroutine(load_image(
-            "button_clicked_background.png"
-        )),
-        font_co: start_coroutine(load_file("atari_games.ttf")),
+        pawn_idle_co: start_coroutine(load_texture("Units/Blue Units/Pawn/Pawn_Idle.png")),
+        pawn_run_co: start_coroutine(load_texture("Units/Blue Units/Pawn/Pawn_Run.png")),
+        house_co: start_coroutine(load_texture("Buildings/Blue Buildings/House1.png")),
+        grass_co: start_coroutine(load_texture("Terrain/Tileset/Tilemap_color1.png")),
+        dust_co: start_coroutine(load_texture("Particle FX/Dust_01.png")),
     };
 
     let ${v}load_start = get_time();
     loop {
         if (!FORCE_VISIBLE_LOAD_SCREEN || get_time() - ${v}load_start >= 2.0)
-            && ${v}ResCo.ship_co.is_done()
-            && ${v}ResCo.bullet_co.is_done()
-            && ${v}ResCo.explosion_co.is_done()
-            && ${v}ResCo.enemy_small_co.is_done()
-            && ${v}ResCo.theme_music_co.is_done()
-            && ${v}ResCo.sound_explosion_co.is_done()
-            && ${v}ResCo.sound_laser_co.is_done()
-            && ${v}ResCo.window_background_co.is_done()
-            && ${v}ResCo.button_background_co.is_done()
-            && ${v}ResCo.button_clicked_background_co.is_done()
-            && ${v}ResCo.font_co.is_done()
+            && ${v}ResCo.pawn_idle_co.is_done()
+            && ${v}ResCo.pawn_run_co.is_done()
+            && ${v}ResCo.house_co.is_done()
+            && ${v}ResCo.grass_co.is_done()
+            && ${v}ResCo.dust_co.is_done()
         {
             break;
         }
@@ -55,43 +41,36 @@ cat << EOF
         next_frame().await;
     }
 
-    let ${v}window_background = ${v}ResCo.window_background_co.retrieve().unwrap()?;
-    let ${v}button_background = ${v}ResCo.button_background_co.retrieve().unwrap()?;
-    let ${v}button_clicked_background =
-        ${v}ResCo.button_clicked_background_co.retrieve().unwrap()?;
-    let ${v}font = ${v}ResCo.font_co.retrieve().unwrap()?;
-
+    // Tiny Swords has no font, and its UI panels are 9-slice pieces with gaps,
+    // so the menu uses plain colors from its palette and macroquad's default font
+    let ${v}paper = Color::from_rgba(239, 225, 197, 255);
+    let ${v}ink = Color::from_rgba(60, 50, 40, 255);
+    let ${v}teal = Color::from_rgba(70, 145, 155, 255);
     let ${v}window_style = root_ui()
         .style_builder()
-        .background(${v}window_background)
-        .background_margin(RectOffset::new(32.0, 76.0, 44.0, 20.0))
-        .margin(RectOffset::new(0.0, -40.0, 0.0, 0.0))
+        .color(${v}paper)
         .build();
     let ${v}button_style = root_ui()
         .style_builder()
-        .background(${v}button_background)
-        .background_clicked(${v}button_clicked_background)
-        .background_margin(RectOffset::new(16.0, 16.0, 16.0, 16.0))
-        .margin(RectOffset::new(16.0, 0.0, -8.0, -8.0))
-        .font(&${v}font)?
+        .color(${v}teal)
+        .color_hovered(Color::from_rgba(90, 170, 180, 255))
+        .color_clicked(Color::from_rgba(45, 105, 115, 255))
+        .margin(RectOffset::new(24.0, 24.0, 10.0, 10.0))
         .text_color(WHITE)
-        .font_size(64)
+        .font_size(48)
         .build();
     let ${v}label_style = root_ui()
         .style_builder()
-        .font(&${v}font)?
-        .text_color(WHITE)
-        .font_size(28)
+        .text_color(${v}ink)
+        .font_size(40)
         .build();
 
     let ${!resources} = Resources {
-        ship_texture: ${v}ResCo.ship_co.retrieve().unwrap()?,
-        bullet_texture: ${v}ResCo.bullet_co.retrieve().unwrap()?,
-        explosion_texture: ${v}ResCo.explosion_co.retrieve().unwrap()?,
-        enemy_small_texture: ${v}ResCo.enemy_small_co.retrieve().unwrap()?,
-        theme_music: ${v}ResCo.theme_music_co.retrieve().unwrap()?,
-        sound_explosion: ${v}ResCo.sound_explosion_co.retrieve().unwrap()?,
-        sound_laser: ${v}ResCo.sound_laser_co.retrieve().unwrap()?,
+        pawn_idle_texture: ${v}ResCo.pawn_idle_co.retrieve().unwrap()?,
+        pawn_run_texture: ${v}ResCo.pawn_run_co.retrieve().unwrap()?,
+        house_texture: ${v}ResCo.house_co.retrieve().unwrap()?,
+        grass_texture: ${v}ResCo.grass_co.retrieve().unwrap()?,
+        dust_texture: ${v}ResCo.dust_co.retrieve().unwrap()?,
         ui_skin: Skin {
             window_style: ${v}window_style,
             button_style: ${v}button_style,
@@ -100,11 +79,13 @@ cat << EOF
         },
     };
 
-    ${!resources}.ship_texture.set_filter(FilterMode::Nearest);
-    ${!resources}.bullet_texture.set_filter(FilterMode::Nearest);
-    ${!resources}.explosion_texture.set_filter(FilterMode::Nearest);
-    ${!resources}.enemy_small_texture.set_filter(FilterMode::Nearest);
+    ${!resources}.pawn_idle_texture.set_filter(FilterMode::Nearest);
+    ${!resources}.pawn_run_texture.set_filter(FilterMode::Nearest);
+    ${!resources}.house_texture.set_filter(FilterMode::Nearest);
+    ${!resources}.grass_texture.set_filter(FilterMode::Nearest);
+    ${!resources}.dust_texture.set_filter(FilterMode::Nearest);
 
-    build_textures_atlas();
+    // no build_textures_atlas(): with these large sprite sheets it stopped the
+    // macroquad UI menu from drawing, and this game draws few enough sprites without it
 
 EOF

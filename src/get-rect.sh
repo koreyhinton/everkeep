@@ -2,15 +2,15 @@
 
 v=$1
 # maps
-. ${NSMAP}/bind ${v} Shape
+. ${NSMAP}/bind ${v} Pos Hitbox
 
 cat << EOF
 
-    let ${v}Rect = Rect {
-        x: ${!shape}.x - ${!shape}.size / 2.0,
-        y: ${!shape}.y - ${!shape}.size / 2.0,
-        w: ${!shape}.size,
-        h: ${!shape}.size,
-    };
+    let ${v}Rect = Rect::new(
+        ${!pos}.x + ${!hitbox}.x,
+        ${!pos}.y + ${!hitbox}.y,
+        ${!hitbox}.w,
+        ${!hitbox}.h,
+    );
 
 EOF

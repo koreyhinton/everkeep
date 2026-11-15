@@ -2,51 +2,48 @@
 
 v=${1:-mn_}
 # maps
-export ${v}dist_x_Vel=circle.speed
+export ${v}res_Resources=resources
+
+export ${v}dir_Unit=unit
+export ${v}dir_Sprite=pawn_sprite
+export ${v}dir_DeltaT=t
+export ${v}dist_x_Vel=unit.speed
 export ${v}dist_x_T=t
-export ${v}dist_y_Vel=circle.speed
+export ${v}dist_x_D=unit.pos.x
+export ${v}dist_x_Dir=unit.dir.x
+export ${v}dist_y_Vel=unit.speed
 export ${v}dist_y_T=t
-export ${v}dist_x_D=circle.x
-export ${v}dist_y_D=circle.y
-export ${v}dist_x_Dir=circle.x_dir
-export ${v}dist_y_Dir=circle.y_dir
-export ${v}dir_Ship=ship_sprite
-export ${v}dir_Circ=circle
-export ${v}fall_Squares=squares
-export ${v}fall_DeltaT=t
-export ${v}drawsq_Squares=squares
-export ${v}drawsq_EnemyTexture=resources.enemy_small_texture
-export ${v}bulls_Circ=circle
-export ${v}bulls_Bullets=bullets
-export ${v}bulls_DeltaT=t
-export ${v}bulls_Squares=squares
-export ${v}bulls_ShootSound=resources.sound_laser
+export ${v}dist_y_D=unit.pos.y
+export ${v}dist_y_Dir=unit.dir.y
 
-export ${v}circ_rect_Shape=circle
-export ${v}sq_rect_Shape=sq
-export ${v}go_SquareRect=${v}sq_rect_Rect
-export ${v}go_CircRect=${v}circ_rect_Rect
-export ${v}go_GameState=game_state
+export ${v}new_rect_Pos=new_house.pos
+export ${v}new_rect_Hitbox=new_house.hitbox
+export ${v}house_rect_Pos=house.pos
+export ${v}house_rect_Hitbox=house.hitbox
 
-export ${v}bullcoll_sq_rect_Shape=square
-export ${v}bullcoll_bull_rect_Shape=bullet
+export ${v}explod_Pos=new_house.pos
+export ${v}explod_Explosions=explosions
+export ${v}explod_ExplosionTexture=resources.dust_texture
+
+export ${v}ground_GrassTexture=resources.grass_texture
+export ${v}back_House=house
+export ${v}back_HouseTexture=resources.house_texture
+export ${v}front_House=house
+export ${v}front_HouseTexture=resources.house_texture
+export ${v}drawunit_Unit=unit
+export ${v}drawunit_Sprite=pawn_sprite
+export ${v}drawunit_IdleTexture=resources.pawn_idle_texture
+export ${v}drawunit_RunTexture=resources.pawn_run_texture
 
 export ${v}drawsc_Score=score
 export ${v}drawsc_HighScore=high_score
 
-export ${v}explod_Square=square
-export ${v}explod_Explosions=explosions
-export ${v}explod_ExplosionTexture=resources.explosion_texture
-
 export ${v}uipress_Ui=ui
-export ${v}uipress_Sq=squares
-export ${v}uipress_Bull=bullets
+export ${v}uipress_Houses=houses
 export ${v}uipress_Expl=explosions
-export ${v}uipress_Circ=circle
+export ${v}uipress_Unit=unit
 export ${v}uipress_Score=score
 export ${v}uipress_GameState=game_state
-
-export ${v}res_Resources=resources
 
 cat << EOF
 
@@ -56,7 +53,6 @@ cat << EOF
     use quad_storage::STORAGE;
     use macroquad::experimental::animation::{AnimatedSprite, Animation};
     use macroquad::experimental::coroutines::{start_coroutine, Coroutine};
-    use macroquad::audio::{Sound,load_sound, play_sound, play_sound_once, PlaySoundParams};
     use macroquad::Error;
     use macroquad::ui::{hash, root_ui, widgets::Window, Skin};
     use macroquad::prelude::*;
@@ -64,176 +60,89 @@ cat << EOF
     // true keeps the loading screen up for at least 2 seconds, to see the spinner
     const FORCE_VISIBLE_LOAD_SCREEN: bool = true;
 
-    const FRAGMENT_SHADER: &str = include_str!("starfield-shader.glsl");
-
-    const VERTEX_SHADER: &str = "#version 100
-    attribute vec3 position;
-    attribute vec2 texcoord;
-    attribute vec4 color0;
-    varying float iTime;
-
-    uniform mat4 Model;
-    uniform mat4 Projection;
-    uniform vec4 _Time;
-
-    void main() {
-        gl_Position = Projection * Model * vec4(position, 1);
-        iTime = _Time.x;
-    }
-    ";
+    // a house's footprint, relative to its bottom-center position
+    const HOUSE_HITBOX: Rect = Rect::new(-56.0, -72.0, 112.0, 72.0);
 
     enum GameState {
         MainMenu,
         Playing,
         Paused,
-        CrashFrame,
-        GameOver,
     }
 
-    struct Shape {
-        size: f32,
+    struct Unit {
+        pos: Vec2, // feet
+        target: Vec2,
+        dir: Vec2,
         speed: f32,
-        x: f32,
-        y: f32,
-        x_dir: f32,
-        y_dir: f32,
-        collided: bool,
+        flip: bool,
+    }
+
+    struct Building {
+        pos: Vec2, // bottom-center
+        hitbox: Rect,
     }
 
     struct Resources {
-        ship_texture: Texture2D,
-        bullet_texture: Texture2D,
-        explosion_texture: Texture2D,
-        enemy_small_texture: Texture2D,
-        theme_music: Sound,
-        sound_explosion: Sound,
-        sound_laser: Sound,
+        pawn_idle_texture: Texture2D,
+        pawn_run_texture: Texture2D,
+        house_texture: Texture2D,
+        grass_texture: Texture2D,
+        dust_texture: Texture2D,
         ui_skin: Skin,
     }
 
     struct ResourceCoroutines {
-        ship_co: Coroutine<Result<Texture2D, Error>>,
-        bullet_co: Coroutine<Result<Texture2D, Error>>,
-        explosion_co: Coroutine<Result<Texture2D, Error>>,
-        enemy_small_co: Coroutine<Result<Texture2D, Error>>,
-        theme_music_co: Coroutine<Result<Sound, Error>>,
-        sound_explosion_co: Coroutine<Result<Sound, Error>>,
-        sound_laser_co: Coroutine<Result<Sound, Error>>,
-        window_background_co: Coroutine<Result<Image, Error>>,
-        button_background_co: Coroutine<Result<Image, Error>>,
-        button_clicked_background_co: Coroutine<Result<Image, Error>>,
-        font_co: Coroutine<Result<Vec<u8>, Error>>,
+        pawn_idle_co: Coroutine<Result<Texture2D, Error>>,
+        pawn_run_co: Coroutine<Result<Texture2D, Error>>,
+        house_co: Coroutine<Result<Texture2D, Error>>,
+        grass_co: Coroutine<Result<Texture2D, Error>>,
+        dust_co: Coroutine<Result<Texture2D, Error>>,
     }
 
     #[macroquad::main("EverKeep")]
     async fn main() -> Result<(), macroquad::Error> {
         rand::srand(miniquad::date::now() as u64);
-        let vel: f32 = 200.0;
         let mut game_state = GameState::MainMenu;
         let storage = &mut STORAGE.lock().unwrap();
 
+        // score is the number of houses built
         let mut score: u32 = 0;
-        let mut high_score: u32 = storage.get("highscore.dat")
+        let mut high_score: u32 = storage.get("houses_high_score")
             .map_or(Ok(0), |i| i.parse::<u32>())
             .unwrap_or(0);
 
-        let mut squares = vec![];
+        let mut houses: Vec<Building> = vec![];
         let mut explosions: Vec<(Emitter, Vec2)> = vec![];
-        let mut bullets: Vec<Shape> = vec![];
-        let mut circle = Shape {
-            size: 32.0,
-            speed: vel,
-            x: screen_width() / 2.0,
-            y: screen_height() / 2.0,
-            x_dir: 0.0,
-            y_dir: 0.0,
-            collided: false,
+        let mut unit = Unit {
+            pos: vec2(screen_width() / 2.0, screen_height() / 2.0),
+            target: vec2(screen_width() / 2.0, screen_height() / 2.0),
+            dir: Vec2::ZERO,
+            speed: 200.0,
+            flip: false,
         };
-
-        let mut direction_modifier: f32 = 0.0;
-        let render_target = render_target(320, 150);
-        render_target.texture.set_filter(FilterMode::Nearest);
-        let material = load_material(
-            ShaderSource::Glsl {
-                vertex: VERTEX_SHADER,
-                fragment: FRAGMENT_SHADER,
-            },
-            MaterialParams {
-                uniforms: vec![
-                    UniformDesc::new("iResolution", UniformType::Float2),
-                    UniformDesc::new("direction_modifier", UniformType::Float1),
-                ],
-                ..Default::default()
-            },
-        )?;
 
         set_pc_assets_folder("assets");
 
         ` ./resources-load-async-loop.sh ${v}res_ `
 
-        let mut enemy_small_sprite = AnimatedSprite::new(
-            17,
-            16,
-            &[Animation {
-                name: "enemy_small".to_string(),
-                row: 0,
-                frames: 2, // column count
-                fps: 12,
-            }],
-            true,
-        );
-        let mut bullet_sprite = AnimatedSprite::new(
-            16,
-            16,
-            &[
-                Animation {
-                    name: "bullet".to_string(),
-                    row: 0,
-                    frames: 2,
-                    fps: 12,
-                },
-                Animation {
-                    name: "bolt".to_string(),
-                    row: 1,
-                    frames: 2,
-                    fps: 12,
-                },
-            ],
-            true,
-        );
-        bullet_sprite.set_animation(1);
-        let mut ship_sprite = AnimatedSprite::new(
-            16,
-            24,
+        let mut pawn_sprite = AnimatedSprite::new(
+            192,
+            192,
             &[
                 Animation {
                     name: "idle".to_string(),
                     row: 0,
-                    frames: 2,
-                    fps: 12,
+                    frames: 8,
+                    fps: 10,
                 },
                 Animation {
-                    name: "left".to_string(),
-                    row: 2,
-                    frames: 2,
-                    fps: 12,
-                },
-                Animation {
-                    name: "right".to_string(),
-                    row: 4,
-                    frames: 2,
-                    fps: 12,
+                    name: "run".to_string(),
+                    row: 0, // run frames are in their own texture
+                    frames: 6,
+                    fps: 10,
                 },
             ],
             true,
-        );
-
-        play_sound(
-            &resources.theme_music,
-            PlaySoundParams {
-                looped: true,
-                volume: 1.,
-            },
         );
 
         root_ui().push_skin(&resources.ui_skin);
@@ -242,20 +151,7 @@ cat << EOF
         loop {
             // Clear
             clear_background(BLACK);
-            material.set_uniform("iResolution", (screen_width(), screen_height()));
-            material.set_uniform("direction_modifier", direction_modifier);
-            gl_use_material(&material);
-            draw_texture_ex(
-                &render_target.texture,
-                0.,
-                0.,
-                WHITE,
-                DrawTextureParams {
-                    dest_size: Some(vec2(screen_width(), screen_height())),
-                    ..Default::default()
-                },
-            );
-            gl_use_default_material();
+            ` ./draw-ground.sh ${v}ground_ `
 
             // Update Model (also based on Key Presses)
             let t = get_frame_time();
@@ -268,11 +164,10 @@ cat << EOF
                     }
                     if is_key_pressed(KeyCode::Space) {
                         // restart the game
-                        squares.clear();
-                        bullets.clear();
+                        houses.clear();
                         explosions.clear();
-                        circle.x = screen_width() / 2.0;
-                        circle.y = screen_height() / 2.0;
+                        unit.pos = vec2(screen_width() / 2.0, screen_height() / 2.0);
+                        unit.target = unit.pos;
                         score = 0;
                         game_state = GameState::Playing;
                     }
@@ -280,56 +175,45 @@ cat << EOF
                 GameState::Playing => 'playing: {
                     if is_key_pressed(KeyCode::Escape) {
                         game_state = GameState::Paused;
-                        break 'playing; // pause skips collision til it resumes
+                        break 'playing; // pause skips the update til it resumes
                     }
-                    ` ./update-falling-squares.sh ${v}fall_ `
-                    ` ./update-circle-dir.sh ${v}dir_ `
-                    direction_modifier += 0.05 * t * circle.x_dir;
+                    ` ./update-unit-dir.sh ${v}dir_ `
                     ` ./distance.sh ${v}dist_x_ `
                     ` ./distance.sh ${v}dist_y_ `
-                    circle.x = clamp(circle.x, 0.0, screen_width());
-                    circle.y = clamp(circle.y, 0.0, screen_height());
-                    ` ./update-bullets-and-squares.sh ${v}bulls_ `
-                    ship_sprite.update();
-                    enemy_small_sprite.update();
-                    bullet_sprite.update();
-                    for square in squares.iter_mut() {
-                        ` ./get-rect.sh ${v}bullcoll_sq_rect_ `
-                        for bullet in bullets.iter_mut() {
-                            ` ./get-rect.sh ${v}bullcoll_bull_rect_ `
-                            if ${v}bullcoll_bull_rect_Rect.overlaps(&${v}bullcoll_sq_rect_Rect) {
-                                bullet.collided = true;
-                                square.collided = true;
-                                score += square.size.round() as u32;
-                                high_score = high_score.max(score);
-                                ` ./update-explosions.sh ${v}explod_ `
-                                play_sound_once(&resources.sound_explosion);
+                    pawn_sprite.update();
+
+                    // place a house just behind the unit, if the spot is free
+                    if is_key_pressed(KeyCode::Space) {
+                        let new_house = Building {
+                            pos: unit.pos - vec2(0.0, 8.0),
+                            hitbox: HOUSE_HITBOX,
+                        };
+                        ` ./get-rect.sh ${v}new_rect_ `
+                        let mut blocked = false;
+                        for house in &houses {
+                            ` ./get-rect.sh ${v}house_rect_ `
+                            if ${v}house_rect_Rect.overlaps(&${v}new_rect_Rect) {
+                                blocked = true;
+                                break;
+                            }
+                        }
+                        if !blocked {
+                            ` ./update-explosions.sh ${v}explod_ `
+                            houses.push(new_house);
+                            score += 1;
+                            if score > high_score {
+                                high_score = score;
+                                storage.set("houses_high_score", &high_score.to_string());
                             }
                         }
                     }
                     explosions.retain(|(explosion, _)| explosion.config.emitting);
-    
-                    println!("{x},{y}", x = circle.x, y = circle.y);
-    
-                    ` ./get-rect.sh ${v}circ_rect_ `
-                    for sq in &squares {
-                        ` ./get-rect.sh ${v}sq_rect_ `
-                        ` ./update-game-over-collision.sh ${v}go_ `
-                    }
                 }
                 GameState::Paused => {
                     if is_key_pressed(KeyCode::Space) {
                         game_state = GameState::Playing;
                     }
-                }
-                GameState::CrashFrame => {
-                    if score == high_score {
-                        storage.set("highscore.dat", &high_score.to_string());
-                    }
-                    game_state = GameState::GameOver
-                }
-                GameState::GameOver => {
-                    if is_key_pressed(KeyCode::Space) {
+                    if is_key_pressed(KeyCode::Escape) {
                         game_state = GameState::MainMenu;
                     }
                 }
@@ -352,66 +236,36 @@ cat << EOF
                     ` ./draw-ui.sh ${v}uipress_ `
                     window.end(&mut *ui);
                 }
-                GameState::Playing => {
-                    let bullet_frame = bullet_sprite.frame();
-                    for bullet in &bullets {
-                        draw_texture_ex(
-                            &resources.bullet_texture,
-                            bullet.x - bullet.size / 2.0,
-                            bullet.y - bullet.size / 2.0,
-                            WHITE,
-                            DrawTextureParams {
-                                dest_size: Some(vec2(bullet.size, bullet.size)),
-                                source: Some(bullet_frame.source_rect),
-                                ..Default::default()
-                            },
-                        );
+                GameState::Playing | GameState::Paused => {
+                    // draw back to front: houses above the unit, the unit, houses below it
+                    for house in &houses {
+                        if house.pos.y <= unit.pos.y {
+                            ` ./draw-house.sh ${v}back_ `
+                        }
                     }
-                    let ship_frame = ship_sprite.frame();
-                    draw_texture_ex(
-                        &resources.ship_texture,
-                        circle.x - ship_frame.dest_size.x,
-                        circle.y - ship_frame.dest_size.y,
-                        WHITE,
-                        DrawTextureParams {
-                            dest_size: Some(ship_frame.dest_size * 2.0),
-                            source: Some(ship_frame.source_rect),
-                            ..Default::default()
-                        },
-                    );
-                    let ${v}drawsq_EnemyFrame = enemy_small_sprite.frame();
-                    ` ./draw-squares.sh ${v}drawsq_ `
+                    ` ./draw-unit.sh ${v}drawunit_ `
+                    for house in &houses {
+                        if house.pos.y > unit.pos.y {
+                            ` ./draw-house.sh ${v}front_ `
+                        }
+                    }
                     for (explosion, coords) in explosions.iter_mut() {
                         explosion.draw(*coords);
                     }
                 }
-                GameState::Paused => {
-                    let text = "Paused";
-                    let text_dimensions = measure_text(text, None, 50, 1.0);
-                    draw_text(
-                        text,
-                        screen_width() / 2.0 - text_dimensions.width / 2.0,
-                        screen_height() / 2.0 - text_dimensions.height / 2.0,
-                        50.0,
-                        WHITE,
-                    );
-                }
-                GameState::CrashFrame => {
-                }
-                GameState::GameOver => {
-                    let text = "GAME OVER!";
-                    let text_dimensions = measure_text(text, None, 50, 1.0);
-                    draw_text(
-                        text,
-                        screen_width() / 2.0 - text_dimensions.width / 2.0,
-                        screen_height() / 2.0,
-                        50.0,
-                        RED,
-                    );
-                }
+            }
+            if let GameState::Paused = game_state {
+                let text = "Paused";
+                let text_dimensions = measure_text(text, None, 50, 1.0);
+                draw_text(
+                    text,
+                    screen_width() / 2.0 - text_dimensions.width / 2.0,
+                    screen_height() / 2.0 - text_dimensions.height / 2.0,
+                    50.0,
+                    WHITE,
+                );
             }
             ` ./draw-score.sh ${v}drawsc_ `
-
 
             next_frame().await
         }

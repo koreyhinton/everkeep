@@ -126,7 +126,7 @@ cat << EOF
     }
 
     #[macroquad::main("EverKeep")]
-    async fn main() {
+    async fn main() -> Result<(), macroquad::Error> {
         rand::srand(miniquad::date::now() as u64);
         let vel: f32 = 200.0;
         let mut game_state = GameState::MainMenu;
@@ -165,8 +165,7 @@ cat << EOF
                 ],
                 ..Default::default()
             },
-        )
-        .unwrap();
+        )?;
 
         set_pc_assets_folder("assets");
 

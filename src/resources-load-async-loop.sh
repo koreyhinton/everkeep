@@ -55,11 +55,11 @@ cat << EOF
         next_frame().await;
     }
 
-    let ${v}window_background = ${v}ResCo.window_background_co.retrieve().unwrap().unwrap();
-    let ${v}button_background = ${v}ResCo.button_background_co.retrieve().unwrap().unwrap();
+    let ${v}window_background = ${v}ResCo.window_background_co.retrieve().unwrap()?;
+    let ${v}button_background = ${v}ResCo.button_background_co.retrieve().unwrap()?;
     let ${v}button_clicked_background =
-        ${v}ResCo.button_clicked_background_co.retrieve().unwrap().unwrap();
-    let ${v}font = ${v}ResCo.font_co.retrieve().unwrap().unwrap();
+        ${v}ResCo.button_clicked_background_co.retrieve().unwrap()?;
+    let ${v}font = ${v}ResCo.font_co.retrieve().unwrap()?;
 
     let ${v}window_style = root_ui()
         .style_builder()
@@ -73,27 +73,25 @@ cat << EOF
         .background_clicked(${v}button_clicked_background)
         .background_margin(RectOffset::new(16.0, 16.0, 16.0, 16.0))
         .margin(RectOffset::new(16.0, 0.0, -8.0, -8.0))
-        .font(&${v}font)
-        .unwrap()
+        .font(&${v}font)?
         .text_color(WHITE)
         .font_size(64)
         .build();
     let ${v}label_style = root_ui()
         .style_builder()
-        .font(&${v}font)
-        .unwrap()
+        .font(&${v}font)?
         .text_color(WHITE)
         .font_size(28)
         .build();
 
     let ${!resources} = Resources {
-        ship_texture: ${v}ResCo.ship_co.retrieve().unwrap().unwrap(),
-        bullet_texture: ${v}ResCo.bullet_co.retrieve().unwrap().unwrap(),
-        explosion_texture: ${v}ResCo.explosion_co.retrieve().unwrap().unwrap(),
-        enemy_small_texture: ${v}ResCo.enemy_small_co.retrieve().unwrap().unwrap(),
-        theme_music: ${v}ResCo.theme_music_co.retrieve().unwrap().unwrap(),
-        sound_explosion: ${v}ResCo.sound_explosion_co.retrieve().unwrap().unwrap(),
-        sound_laser: ${v}ResCo.sound_laser_co.retrieve().unwrap().unwrap(),
+        ship_texture: ${v}ResCo.ship_co.retrieve().unwrap()?,
+        bullet_texture: ${v}ResCo.bullet_co.retrieve().unwrap()?,
+        explosion_texture: ${v}ResCo.explosion_co.retrieve().unwrap()?,
+        enemy_small_texture: ${v}ResCo.enemy_small_co.retrieve().unwrap()?,
+        theme_music: ${v}ResCo.theme_music_co.retrieve().unwrap()?,
+        sound_explosion: ${v}ResCo.sound_explosion_co.retrieve().unwrap()?,
+        sound_laser: ${v}ResCo.sound_laser_co.retrieve().unwrap()?,
         ui_skin: Skin {
             window_style: ${v}window_style,
             button_style: ${v}button_style,

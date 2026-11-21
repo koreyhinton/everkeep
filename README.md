@@ -57,6 +57,14 @@ To run one test, run `./test.sh` once to generate the test files, then pass a na
 cargo test --test lockstep same_seed
 ```
 
+### Mutation tests
+
+```bash
+./tests/mutate.sh
+```
+
+These check the inverse: that the tests fail when the game is wrong. Each mutant is a copy of the scripts with one `sed` edit. It either removes a snippet entirely (as if it were never written, the state the tests were first written against) or adds one bug, such as a hall that costs nothing or a minimap that ignores units. The tests run against each copy, and every mutant must make at least one test fail. A mutant that survives means a gap in the tests; the script prints which test killed each mutant. It takes about 30 seconds and shares `target/` with the normal build. Add a mutant to `tests/mutate.sh` when you add a feature.
+
 On Linux, the `audio` feature needs ALSA's development files to build (`sudo apt install libasound2-dev`).
 
 CI (`.github/workflows/rust.yml`) checks out orc's `main` next to this repo and runs `./test.sh` on pushes and pull requests to `main`.

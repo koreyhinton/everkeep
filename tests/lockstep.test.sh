@@ -129,6 +129,9 @@ fn the_same_seed_and_commands_give_the_same_world() {
     assert_eq!(a.buildings.len(), 2, "both halls should be built");
     assert_eq!(a.units.len(), 4, "both pawns should be trained");
     assert_eq!(a.gold, [START_GOLD - HALL_COST - PAWN_COST; 2]);
+    for unit in a.units.iter() {
+        assert_eq!(unit.pos, unit.target, "unit {} didn't stop at its target", unit.id);
+    }
     assert_eq!(checksum_of(&a), checksum_of(&b), "the same commands gave different worlds");
 }
 

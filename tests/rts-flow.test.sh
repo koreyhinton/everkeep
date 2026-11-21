@@ -385,6 +385,15 @@ fn hud_texts(draws: &[Draw]) -> Vec<String> {
         .collect()
 }
 
+// the HUD's texts other than the gold and the button labels: what it says
+// about the selection (gold changes on its own, so it can't show that)
+fn hud_info(draws: &[Draw]) -> Vec<String> {
+    hud_texts(draws)
+        .into_iter()
+        .filter(|text| !text.starts_with("Gold") && text != "Build Main Hall" && text != "Train Pawn")
+        .collect()
+}
+
 // a point inside the HUD text with this label, to click its button
 fn button(draws: &[Draw], label: &str) -> (f32, f32) {
     let found = in_phase(draws, "hud")
@@ -443,6 +452,7 @@ fn build_a_hall_train_a_pawn_and_move_both_to_a_scrolled_view() {
     let draws = frame(&mut world, hover(mid));
     let start_gold = gold(&draws);
     let hud_at_start = hud_texts(&draws);
+    let hud_info_at_start = hud_info(&draws);
     let minimap_at_start = in_phase(&draws, "minimap");
     assert!(!minimap_at_start.is_empty(), "the minimap drew nothing");
     let build = button(&draws, "Build Main Hall");
@@ -482,7 +492,10 @@ fn build_a_hall_train_a_pawn_and_move_both_to_a_scrolled_view() {
     let draws = frame(&mut world, hover(mid));
     let hud_with_hall = hud_texts(&draws);
     assert_ne!(hud_with_hall, hud_at_start, "the HUD didn't change when the hall was selected");
+    assert_ne!(hud_info(&draws), hud_info_at_start, "the HUD doesn't say the hall is selected");
+    let hud_info_with_hall = hud_info(&draws);
     let train = button(&draws, "Train Pawn");
+    let minimap_before_pawn = in_phase(&draws, "minimap");
 
     // 5. train a pawn: a second unit next to the hall, and less gold
     play(&mut world, left_click(train));
@@ -497,6 +510,7 @@ fn build_a_hall_train_a_pawn_and_move_both_to_a_scrolled_view() {
     assert!(distance < 200.0, "the new pawn is {distance} px from the hall, not alongside it");
     let draws = frame(&mut world, hover(mid));
     assert!(gold(&draws) < gold_after_hall, "training the pawn didn't cost gold");
+    assert_ne!(in_phase(&draws, "minimap"), minimap_before_pawn, "the minimap didn't show the new pawn");
 
     // 6. drag-select both units: the HUD changes again, without Train Pawn
     let boxes: Vec<Rect> = world
@@ -511,6 +525,7 @@ fn build_a_hall_train_a_pawn_and_move_both_to_a_scrolled_view() {
     let draws = frame(&mut world, hover(mid));
     let hud_with_units = hud_texts(&draws);
     assert_ne!(hud_with_units, hud_with_hall, "the HUD didn't change when the units were selected");
+    assert_ne!(hud_info(&draws), hud_info_with_hall, "the HUD doesn't say the units are selected");
     assert!(
         !hud_with_units.iter().any(|text| text == "Train Pawn"),
         "Train Pawn is still offered with only units selected"
@@ -532,5 +547,37 @@ fn build_a_hall_train_a_pawn_and_move_both_to_a_scrolled_view() {
         );
     }
     assert_ne!(in_phase(&draws, "minimap"), minimap_before_move, "the minimap didn't show the move");
+
+    // 8. with the view scrolled, a second hall lands where it's clicked, in
+    // world space
+    let build = button(&draws, "Build Main Hall");
+    play(&mut world, left_click(build));
+    play(&mut world, left_click(mid));
+    assert_eq!(world.buildings.len(), 2, "the second hall wasn't placed");
+    let expected = vec2(mid.0, mid.1) + world.view;
+    assert!(
+        world.buildings[1].pos.distance(expected) <= 1.0,
+        "the hall is at {:?}, not under the mouse at {expected:?} (view {:?})",
+        world.buildings[1].pos,
+        world.view
+    );
+}
+
+// the minimap shows units and the view on their own (in the flow above, the
+// view scrolls while units move, so either alone could hide the other)
+#[test]
+fn the_minimap_shows_where_units_are_and_where_the_view_is() {
+    let mid = (SCREEN_W / 2.0, SCREEN_H / 2.0);
+    let mut world = World::new();
+    let start = in_phase(&frame(&mut world, hover(mid)), "minimap");
+
+    world.units[0].pos += vec2(300.0, 0.0);
+    world.units[0].target = world.units[0].pos;
+    let moved = in_phase(&frame(&mut world, hover(mid)), "minimap");
+    assert_ne!(moved, start, "the minimap didn't show the unit's new position");
+
+    world.view = vec2(600.0, 400.0);
+    let scrolled = in_phase(&frame(&mut world, hover(mid)), "minimap");
+    assert_ne!(scrolled, moved, "the minimap didn't show the view's new position");
 }
 EOF

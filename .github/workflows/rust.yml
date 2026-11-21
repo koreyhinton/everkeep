@@ -30,3 +30,7 @@ jobs:
     - name: run tests
       working-directory: ./everkeep
       run: ./test.sh
+    # each mutant breaks or removes one piece of the game; a test must fail on it
+    - name: run mutation tests
+      working-directory: ./everkeep
+      run: ./tests/mutate.sh

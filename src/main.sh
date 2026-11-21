@@ -38,6 +38,13 @@ export ${v}drawunit_Sprite=pawn_sprite
 export ${v}drawunit_IdleTexture=resources.pawn_idle_texture
 export ${v}drawunit_RunTexture=resources.pawn_run_texture
 
+export ${v}drag_DragStart=drag_start
+export ${v}drag_Unit=unit
+export ${v}drag_Houses=houses
+export ${v}sel_Unit=unit
+export ${v}sel_Houses=houses
+export ${v}dragbox_DragStart=drag_start
+
 export ${v}drawsc_Score=score
 export ${v}drawsc_HighScore=high_score
 
@@ -65,6 +72,9 @@ cat << EOF
     // a house's footprint, relative to its bottom-center position
     const HOUSE_HITBOX: Rect = Rect::new(-56.0, -72.0, 112.0, 72.0);
 
+    // the unit's body, relative to its feet
+    const UNIT_HITBOX: Rect = Rect::new(-24.0, -64.0, 48.0, 64.0);
+
 EOF
 
 # between heredocs, not in backticks, so a version mismatch stops the build
@@ -84,11 +94,14 @@ cat << EOF
         dir: Vec2,
         speed: f32,
         flip: bool,
+        hitbox: Rect,
+        selected: bool,
     }
 
     struct Building {
         pos: Vec2, // bottom-center
         hitbox: Rect,
+        selected: bool,
     }
 
     struct Resources {
@@ -128,7 +141,10 @@ cat << EOF
             dir: Vec2::ZERO,
             speed: 200.0,
             flip: false,
+            hitbox: UNIT_HITBOX,
+            selected: false,
         };
+        let mut drag_start: Option<Vec2> = None;
 
         set_pc_assets_folder("assets");
 
@@ -181,6 +197,8 @@ cat << EOF
                         explosions.clear();
                         unit.pos = vec2(screen_width() / 2.0, screen_height() / 2.0);
                         unit.target = unit.pos;
+                        unit.selected = false;
+                        drag_start = None;
                         score = 0;
                         game_state = GameState::Playing;
                     }
@@ -191,6 +209,7 @@ cat << EOF
                         break 'playing; // pause skips the update til it resumes
                     }
                     ` ./update-unit-dir.sh ${v}dir_ `
+                    ` ./update-drag-select.sh ${v}drag_ `
                     ` ./distance.sh ${v}dist_x_ `
                     ` ./distance.sh ${v}dist_y_ `
 
@@ -202,6 +221,7 @@ cat << EOF
                         let new_house = Building {
                             pos: unit.pos - vec2(0.0, 8.0),
                             hitbox: HOUSE_HITBOX,
+                            selected: false,
                         };
                         ` ./get-rect.sh ${v}new_rect_ `
                         let mut blocked = false;
@@ -264,6 +284,8 @@ cat << EOF
                             ` ./draw-house.sh ${v}front_ `
                         }
                     }
+                    ` ./draw-selection.sh ${v}sel_ `
+                    ` ./draw-drag-box.sh ${v}dragbox_ `
                     for (explosion, coords) in explosions.iter_mut() {
                         explosion.draw(*coords);
                     }

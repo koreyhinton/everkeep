@@ -12,6 +12,7 @@ cat << EOF
         ${!expl}.clear();
         ${!unit}.pos = vec2(screen_width() / 2.0, screen_height() / 2.0);
         ${!unit}.target = ${!unit}.pos;
+        ${!unit}.selected = false;
         ${!score} = 0;
         ${!game_state} = GameState::Playing;
     }

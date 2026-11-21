@@ -6,7 +6,7 @@ v=$1
 
 cat << EOF
 
-    if is_mouse_button_pressed(MouseButton::Left) {
+    if is_mouse_button_pressed(MouseButton::Right) {
         let (${v}mouse_x, ${v}mouse_y) = mouse_position();
         ${!unit}.target = vec2(${v}mouse_x, ${v}mouse_y);
     }

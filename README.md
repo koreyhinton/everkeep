@@ -10,7 +10,7 @@ Just as a starter, spacebar places a building and left mouse click moves a playe
 
 ## Build and run
 
-`src/main.rs` is generated, so run the generator first, then start the game with cargo. The generator expects [orc](https://github.com/koreyhinton/orc) to be cloned next to this repo (`../orc`).
+`src/main.rs` is generated, so run the generator first, then start the game with cargo. The generator expects [orc](https://github.com/koreyhinton/orc) to be cloned next to this repo (`../orc`). The orc library versions it asks for are set in `orc-env.sh`; if the build fails with `invalid orc animation version specified`, check out the orc version that matches, or update `orc-env.sh` (and the code) to the version you have.
 
 ```bash
 ./build.sh

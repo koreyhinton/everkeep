@@ -10,6 +10,7 @@
 
 : "${ORC_ANIMATE:?set ORC_ANIMATE (see test.sh)}"
 : "${NSMAP:?set NSMAP (see test.sh)}"
+: "${ORC_ANIMATE_VERSION:?set ORC_ANIMATE_VERSION (see orc-env.sh)}"
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../src" || exit 1
 
@@ -28,7 +29,12 @@ cat << EOF
 use macroquad::prelude::*;
 use std::cell::RefCell;
 
-` ${ORC_ANIMATE}/models.sh _ `
+EOF
+
+# between heredocs, not in backticks, so a version mismatch stops generation
+${ORC_ANIMATE}/models.sh "${ORC_ANIMATE_VERSION}" || exit 1
+
+cat << EOF
 
 struct Unit {
     pos: Vec2,

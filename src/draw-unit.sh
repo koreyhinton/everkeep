@@ -12,22 +12,20 @@ cat << EOF
     } else {
         &${!run_texture}
     };
-    draw_texture_ex(
-        ${v}texture,
-        ${!unit}.pos.x - 96.0,
-        ${!unit}.pos.y - 128.0,
-        WHITE,
-        DrawTextureParams {
-            source: Some(Rect::new(
-                // todo: instead use the get or zero method used in animate-sprite and just do that once and access the values directly:
-                ${!sprite}.paint_frame.as_ref().unwrap().x,
-                ${!sprite}.paint_frame.as_ref().unwrap().y,
-                ${!sprite}.paint_frame.as_ref().unwrap().w,
-                ${!sprite}.paint_frame.as_ref().unwrap().h,
-            )),
-            flip_x: ${!unit}.flip,
-            ..Default::default()
-        },
-    );
+    // no paint frame until animate-sprite's first update (starting a game
+    // with Space draws before it), so skip the unit for that frame
+    if let Some(${v}paint) = ${!sprite}.paint_frame.as_ref() {
+        draw_texture_ex(
+            ${v}texture,
+            ${!unit}.pos.x - 96.0,
+            ${!unit}.pos.y - 128.0,
+            WHITE,
+            DrawTextureParams {
+                source: Some(Rect::new(${v}paint.x, ${v}paint.y, ${v}paint.w, ${v}paint.h)),
+                flip_x: ${!unit}.flip,
+                ..Default::default()
+            },
+        );
+    }
 
 EOF

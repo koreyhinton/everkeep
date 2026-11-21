@@ -7,9 +7,7 @@ cd "$(dirname "$0")" || exit 1
 
 ./build.sh || exit 1
 
-orc=$(realpath ../orc/)
-export NSMAP="${orc}/lib/src/main/bash/com/koreyhinton/nsmap"
-export ORC_ANIMATE="${orc}/lib/src/templates/rust/com/koreyhinton/animation"
+. ./orc-env.sh
 
 set -o pipefail
 

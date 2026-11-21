@@ -65,7 +65,12 @@ cat << EOF
     // a house's footprint, relative to its bottom-center position
     const HOUSE_HITBOX: Rect = Rect::new(-56.0, -72.0, 112.0, 72.0);
 
-    ` ${ORC_ANIMATE}/models.sh _ `
+EOF
+
+# between heredocs, not in backticks, so a version mismatch stops the build
+${ORC_ANIMATE}/models.sh "${ORC_ANIMATE_VERSION}" || exit 1
+
+cat << EOF
 
     enum GameState {
         MainMenu,

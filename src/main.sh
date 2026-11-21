@@ -4,9 +4,12 @@ v=${1:-mn_}
 # maps
 export ${v}res_Resources=resources
 
+export ${v}anim_AnimatedSprite=pawn_sprite
 export ${v}dir_Unit=unit
 export ${v}dir_Sprite=pawn_sprite
 export ${v}dir_DeltaT=t
+export ${v}dir_IdleAnimation=idle_animation
+export ${v}dir_RunAnimation=run_animation
 export ${v}dist_x_Vel=unit.speed
 export ${v}dist_x_T=t
 export ${v}dist_x_D=unit.pos.x
@@ -51,7 +54,6 @@ cat << EOF
 
     use macroquad_particles::{AtlasConfig, Emitter, EmitterConfig};
     use quad_storage::STORAGE;
-    use macroquad::experimental::animation::{AnimatedSprite, Animation};
     use macroquad::experimental::coroutines::{start_coroutine, Coroutine};
     use macroquad::Error;
     use macroquad::ui::{hash, root_ui, widgets::Window, Skin};
@@ -62,6 +64,8 @@ cat << EOF
 
     // a house's footprint, relative to its bottom-center position
     const HOUSE_HITBOX: Rect = Rect::new(-56.0, -72.0, 112.0, 72.0);
+
+    ` ${ORC_ANIMATE}/models.sh _ `
 
     enum GameState {
         MainMenu,
@@ -125,25 +129,29 @@ cat << EOF
 
         ` ./resources-load-async-loop.sh ${v}res_ `
 
-        let mut pawn_sprite = AnimatedSprite::new(
-            192,
-            192,
-            &[
-                Animation {
-                    name: "idle".to_string(),
-                    row: 0,
-                    frames: 8,
-                    fps: 10,
-                },
-                Animation {
-                    name: "run".to_string(),
-                    row: 0, // run frames are in their own texture
-                    frames: 6,
-                    fps: 10,
-                },
-            ],
-            true,
-        );
+        let idle_animation = Animation {
+            id: "idle".to_string(),
+            row: 0,
+            frames: 8,
+            fps: 10.0,
+        };
+
+        let run_animation = Animation {
+            id: "run".to_string(),
+            row: 0,
+            frames: 6,
+            fps: 10.0,
+        };
+
+        let mut pawn_sprite = AnimatedSprite {
+            w: 192.0,
+            h: 192.0,
+            frame: 0,
+            frame_time: 0.0,
+            animation: &idle_animation,
+            last_animation_id: String::new(),
+            paint_frame: None,
+        };
 
         root_ui().push_skin(&resources.ui_skin);
         let window_size = vec2(370.0, 320.0);
@@ -180,7 +188,9 @@ cat << EOF
                     ` ./update-unit-dir.sh ${v}dir_ `
                     ` ./distance.sh ${v}dist_x_ `
                     ` ./distance.sh ${v}dist_y_ `
-                    pawn_sprite.update();
+
+                    pawn_sprite.frame_time += t;
+                    ` ${ORC_ANIMATE}/snippets/macroquad/animate-sprite.sh ${v}anim_ `
 
                     // place a house just behind the unit, if the spot is free
                     if is_key_pressed(KeyCode::Space) {

@@ -1,0 +1,36 @@
+# Generates main.rs and the tests from bash with orc, then runs the tests
+
+name: Rust CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  rust:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    # build.sh and test.sh expect orc cloned next to this repo (../orc)
+    - name: checkout everkeep using actions/checkout@v4
+      uses: actions/checkout@v4
+      with:
+        path: everkeep
+    - name: checkout orc using actions/checkout@v4
+      uses: actions/checkout@v4
+      with:
+        repository: koreyhinton/orc
+        ref: main
+        path: orc
+    - name: install ALSA headers for the macroquad audio feature
+      run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+    - name: run tests
+      working-directory: ./everkeep
+      run: ./test.sh
+    # each mutant breaks or removes one piece of the game; a test must fail on it
+    - name: run mutation tests
+      working-directory: ./everkeep
+      run: ./tests/mutate.sh

@@ -7,21 +7,25 @@ v=$1
 cat << EOF
 
     let ${v}ResCo = ResourceCoroutines {
-        pawn_idle_co: start_coroutine(load_texture("Units/Blue Units/Pawn/Pawn_Idle.png")),
-        pawn_run_co: start_coroutine(load_texture("Units/Blue Units/Pawn/Pawn_Run.png")),
-        house_co: start_coroutine(load_texture("Buildings/Blue Buildings/House1.png")),
+        blue_idle_co: start_coroutine(load_texture("Units/Blue Units/Pawn/Pawn_Idle.png")),
+        blue_run_co: start_coroutine(load_texture("Units/Blue Units/Pawn/Pawn_Run.png")),
+        red_idle_co: start_coroutine(load_texture("Units/Red Units/Pawn/Pawn_Idle.png")),
+        red_run_co: start_coroutine(load_texture("Units/Red Units/Pawn/Pawn_Run.png")),
+        blue_hall_co: start_coroutine(load_texture("Buildings/Blue Buildings/Castle.png")),
+        red_hall_co: start_coroutine(load_texture("Buildings/Red Buildings/Castle.png")),
         grass_co: start_coroutine(load_texture("Terrain/Tileset/Tilemap_color1.png")),
-        dust_co: start_coroutine(load_texture("Particle FX/Dust_01.png")),
     };
 
     let ${v}load_start = get_time();
     loop {
         if (!FORCE_VISIBLE_LOAD_SCREEN || get_time() - ${v}load_start >= 2.0)
-            && ${v}ResCo.pawn_idle_co.is_done()
-            && ${v}ResCo.pawn_run_co.is_done()
-            && ${v}ResCo.house_co.is_done()
+            && ${v}ResCo.blue_idle_co.is_done()
+            && ${v}ResCo.blue_run_co.is_done()
+            && ${v}ResCo.red_idle_co.is_done()
+            && ${v}ResCo.red_run_co.is_done()
+            && ${v}ResCo.blue_hall_co.is_done()
+            && ${v}ResCo.red_hall_co.is_done()
             && ${v}ResCo.grass_co.is_done()
-            && ${v}ResCo.dust_co.is_done()
         {
             break;
         }
@@ -66,11 +70,23 @@ cat << EOF
         .build();
 
     let ${!resources} = Resources {
-        pawn_idle_texture: ${v}ResCo.pawn_idle_co.retrieve().unwrap()?,
-        pawn_run_texture: ${v}ResCo.pawn_run_co.retrieve().unwrap()?,
-        house_texture: ${v}ResCo.house_co.retrieve().unwrap()?,
+        // per owner (blue, red), then [idle, run]
+        pawn_textures: [
+            [
+                ${v}ResCo.blue_idle_co.retrieve().unwrap()?,
+                ${v}ResCo.blue_run_co.retrieve().unwrap()?,
+            ],
+            [
+                ${v}ResCo.red_idle_co.retrieve().unwrap()?,
+                ${v}ResCo.red_run_co.retrieve().unwrap()?,
+            ],
+        ],
+        // per owner (blue, red)
+        hall_textures: [
+            ${v}ResCo.blue_hall_co.retrieve().unwrap()?,
+            ${v}ResCo.red_hall_co.retrieve().unwrap()?,
+        ],
         grass_texture: ${v}ResCo.grass_co.retrieve().unwrap()?,
-        dust_texture: ${v}ResCo.dust_co.retrieve().unwrap()?,
         ui_skin: Skin {
             window_style: ${v}window_style,
             button_style: ${v}button_style,
@@ -79,11 +95,13 @@ cat << EOF
         },
     };
 
-    ${!resources}.pawn_idle_texture.set_filter(FilterMode::Nearest);
-    ${!resources}.pawn_run_texture.set_filter(FilterMode::Nearest);
-    ${!resources}.house_texture.set_filter(FilterMode::Nearest);
+    for ${v}texture in ${!resources}.pawn_textures.iter().flatten() {
+        ${v}texture.set_filter(FilterMode::Nearest);
+    }
+    for ${v}texture in ${!resources}.hall_textures.iter() {
+        ${v}texture.set_filter(FilterMode::Nearest);
+    }
     ${!resources}.grass_texture.set_filter(FilterMode::Nearest);
-    ${!resources}.dust_texture.set_filter(FilterMode::Nearest);
 
     // no build_textures_atlas(): with these large sprite sheets it stopped the
     // macroquad UI menu from drawing, and this game draws few enough sprites without it

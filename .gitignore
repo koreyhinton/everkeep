@@ -13,12 +13,14 @@ assets/*
 /target
 
 
+# old high-score save from quad_storage (no longer used)
+local.data
+
 # orc-generated files
 /src/main.rs
 /src/main.rs.tmp
+/tests/*.rs
 
-# quad_storage
-local.data
-
-# target wasm copied adjacent to index.html
+# target wasm and orc ws plugin copied adjacent to index.html (build-web.sh)
 everkeep.wasm
+orc_ws.js

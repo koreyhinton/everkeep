@@ -2,21 +2,22 @@
 
 v=$1
 # maps
-. ${NSMAP}/bind ${v} Ui Houses Expl Unit Score GameState
+. ${NSMAP}/bind ${v} Ui GameState Server JoinSent
 
 cat << EOF
 
     ${!ui}.label(vec2(105.0, 20.0), "Main Menu");
     if ${!ui}.button(vec2(130.0, 90.0), "Play") {
-        ${!houses}.clear();
-        ${!expl}.clear();
-        ${!unit}.pos = vec2(screen_width() / 2.0, screen_height() / 2.0);
-        ${!unit}.target = ${!unit}.pos;
-        ${!score} = 0;
-        ${!game_state} = GameState::Playing;
+        ${!game_state} = GameState::Starting;
+    }
+    // Multiplayer needs a lockstep server: --server URL on desktop, or the
+    // page's server in the browser
+    if ${!server}.is_some() && ${!ui}.button(vec2(40.0, 175.0), "Multiplayer") {
+        ${!join_sent} = false;
+        ${!game_state} = GameState::Joining;
     }
     #[cfg(not(target_arch = "wasm32"))]
-    if ${!ui}.button(vec2(130.0, 190.0), "Quit") {
+    if ${!ui}.button(vec2(130.0, 260.0), "Quit") {
         std::process::exit(0);
     }
 

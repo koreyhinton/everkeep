@@ -6,7 +6,33 @@ Art: the game art isn't included in this repo because its license doesn't allow 
 
 # Gameplay
 
-Just as a starter, spacebar places a building and left mouse click moves a player unit.
+A starter RTS. Press Space (or Play) to start, and Escape to pause.
+
+- You start with one pawn and 500 gold, shown in the HUD along the bottom.
+- **Build Main Hall** (bottom-right, 200 gold): a see-through hall follows the mouse. Left-click to place it, or right-click to cancel.
+- Drag a box around your hall to select it, then **Train Pawn** (50 gold) to add a pawn next to it.
+- Drag a box around units to select them (units win over buildings), and right-click to move them. The view scrolls to follow them across the world, and the minimap in the HUD's bottom-left shows the whole world and where you're looking.
+
+## Multiplayer
+
+Two players can play over [sharecmd](https://github.com/koreyhinton/sharecmd)'s lockstep server. Every order (placing a hall, training a pawn, moving) is a command. Each client sends its commands for a turn to the server, and both clients run both players' commands on the same turn. With the same seed from the server, both simulations stay in step. The HUD shows a checksum of the game state, which should match in both windows.
+
+Start the server from a sharecmd checkout (its `build.sh` also needs `../orc`):
+
+```bash
+./build.sh
+go run . -mode server -addr :8080
+```
+
+Then start two clients and choose **Multiplayer** in each:
+
+```bash
+cargo run -- --server http://localhost:8080
+```
+
+The Multiplayer button only shows on desktop when `--server` is given. In the browser it connects to port 8080 on the page's host, or to `?server=URL`.
+
+The websocket and HTTP code comes from orc's Rust ws library (`ORC_WS`, set in `orc-env.sh`), adapted from sharecmd's Rust demo client.
 
 ## Build and run
 
@@ -28,7 +54,7 @@ cargo run
 To run one test, run `./test.sh` once to generate the test files, then pass a name filter to cargo:
 
 ```bash
-cargo test --test draw_unit first_update
+cargo test --test lockstep same_seed
 ```
 
 On Linux, the `audio` feature needs ALSA's development files to build (`sudo apt install libasound2-dev`).
@@ -37,13 +63,11 @@ CI (`.github/workflows/rust.yml`) checks out orc's `main` next to this repo and 
 
 ## Web build
 
-Run the generator, then build for WebAssembly. Add the wasm target once with rustup first.
+Add the wasm target once with rustup, then build. `build-web.sh` runs the generator, builds `everkeep.wasm`, and copies it and orc ws's browser plugin (`orc_ws.js`) next to `index.html`.
 
 ```bash
 rustup target add wasm32-unknown-unknown
-./build.sh
-cargo build --release --target wasm32-unknown-unknown
-cp target/wasm32-unknown-unknown/release/everkeep.wasm .
+./build-web.sh
 python3 -m http.server
 ```
 

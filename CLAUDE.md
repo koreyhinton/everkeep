@@ -11,16 +11,28 @@ cargo run
 
 - `src/main.rs` is generated and gitignored. Never edit it; edit the `.sh` files and run `./build.sh`.
 - `build.sh` keeps the last good `main.rs` if rustfmt fails.
-- `main.sh` prints `#![allow(non_snake_case)]` because orc names like `mn_dist_D` aren't snake case.
+- `main.sh` prints `#![allow(non_snake_case)]` because orc names like `mn_join_Post` aren't snake case.
+- `./test.sh` generates `tests/*.test.sh` into `tests/*.rs` (gitignored) and runs `cargo test`. Run `. ./orc-env.sh` before generating one test file by hand.
+- `src/models.sh` prints the game's constants and types (World, Unit, Command, ...). `main.sh` and the tests both print it, so snippets compile against the same definitions everywhere.
 
 ## Assembling code with orc
 
-- `src/main.sh` is the app. It prints the program and inlines snippets with backticks: `` ` ./distance.sh ${v}dist_ ` ``.
+- `src/main.sh` is the app. It prints the program and inlines snippets with backticks: `` ` ./update-units.sh ${v}units_ ` ``.
 - Snippets (`src/*.sh`) print straight-line Rust that works anywhere it's inlined. Follow orc's rules in `../orc/CLAUDE.md`.
 - `v` is the bash namespace variable. `main.sh` sets `v=${1:-mn_}`, and each snippet takes its namespace as `v=$1`.
-- Map a snippet's inputs to Rust names in `main.sh` with exports (`export ${v}dist_Vel=vel`). Inside the snippet, bind them with `. ${NSMAP}/bind ${v} Vel T D` and use them as `${!vel}`, `${!t}`, `${!d}`.
-- Outputs left unmapped get the namespaced name (`mn_dist_D`).
+- Map a snippet's inputs to Rust names in `main.sh` with exports (`export ${v}units_Units=world.units`). Inside the snippet, bind them with `. ${NSMAP}/bind ${v} Units DeltaT` and use them as `${!units}`, `${!delta_t}`.
+- Outputs left unmapped get the namespaced name (`mn_join_Post`).
 - App snippets don't need orc's interface header comment. That's only for reusable snippets added to the orc library.
+- orc libraries used: animation (`ORC_ANIMATE`) and the Rust ws client (`ORC_WS`), both set in `orc-env.sh`. Their `models.sh` run between heredocs in `main.sh` so a version mismatch stops the build.
+
+## The sim is lockstep
+
+Multiplayer runs both players' sims on each machine (see README "Multiplayer"), so they must stay identical.
+
+- Input snippets only push `Command`s to `world.outbox`. `apply-commands.sh` is the only place that changes units, buildings, gold or `next_id`. Offline, `main.sh` loops the outbox straight back as the current turn's commands.
+- Sim snippets (`apply-commands.sh`, `update-units.sh`, `world-reset.sh`) run in fixed `TICK_SECS` steps and may only depend on commands and sim state: no frame time, mouse, screen size (except `world-reset.sh`'s starting view), clock or `HashMap` order.
+- Selection, placing, the drag and the view are local and never go through commands.
+- `tests/lockstep.test.sh` checks determinism and the command rules.
 
 ## Don't use `v` as a name
 

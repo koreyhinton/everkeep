@@ -9,3 +9,6 @@ orc=$(realpath "$(dirname "${BASH_SOURCE[0]}")/../orc")
 export NSMAP="${orc}/lib/src/main/bash/com/koreyhinton/nsmap"
 export ORC_ANIMATE="${orc}/lib/src/templates/rust/com/koreyhinton/animation"
 export ORC_ANIMATE_VERSION="0.1.0"
+# orc's Rust websocket client (lockstep multiplayer against sharecmd's server)
+export ORC_WS="${orc}/lib/src/templates/rust/com/koreyhinton/ws"
+export ORC_WS_VERSION="0.1.0"

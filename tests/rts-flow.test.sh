@@ -1,8 +1,7 @@
 #!/bin/bash
 
 # Prints the RTS starter flow test as one Rust file (test.sh writes it to
-# tests/rts_flow.rs). Written test-first: none of the snippets it inlines exist
-# yet, so generation leaves them out and the test fails until they're added.
+# tests/rts_flow.rs).
 #
 # One test plays the starter's whole flow, a frame at a time:
 #   1. The HUD shows the starting gold and a "Build Main Hall" button in the
@@ -17,41 +16,44 @@
 #      scrolls right to keep them on screen, and the minimap changes.
 #
 # How it's driven: frame() inlines every snippet once, like one pass of
-# main.sh's loop, with the game state in a World. Local fns shadow
-# macroquad's glob import (as in the other tests): the input and screen
-# stubs return a scripted state, and the draw stubs record each call, tagged
-# with the phase (world, placement, minimap, hud) of the snippet that made it.
-# The test finds HUD buttons and the gold amount from the recorded text, so it
-# doesn't fix a layout.
+# main.sh's loop, with the game state in a World (src/models.sh, shared with
+# the game). Local fns shadow macroquad's glob import (as in the other
+# tests): the input and screen stubs return a scripted state, and the draw
+# stubs record each call, tagged with the phase (world, placement, minimap,
+# hud) of the snippet that made it. The test finds HUD buttons and the gold
+# amount from the recorded text, so it doesn't fix a layout.
 #
-# What the snippets need to provide (the interface this test fixes):
-#   update-hud.sh        Units Buildings Gold Placing View: HUD button clicks.
-#                        "Build Main Hall" sets Placing; "Train Pawn" (hall
-#                        selected) spends gold and adds a unit next to it. A
-#                        click on a button must not change the selection.
-#   update-placement.sh  Placing Buildings Gold View: while placing, a left
-#                        click adds the hall (pos at the mouse, in world
-#                        space), spends gold and ends placing.
-#   update-select.sh     DragStart Units Buildings View: left-drag selection,
-#                        for many units; units win over buildings.
-#   update-orders.sh     Units View: right-click moves the selected units.
+# The input snippets only queue orders (Command) in world.outbox, and
+# apply-commands.sh is the one place the sim changes. frame() applies the
+# outbox straight away, as the game does offline; online, the game sends it
+# through the lockstep server first (see tests/lockstep.test.sh).
+#
+#   hud-layout.sh        -> BuildButton TrainButton: the HUD buttons' rects
+#   update-hud.sh        Buildings Gold Placing Outbox Me BuildButton
+#                        TrainButton: "Build Main Hall" sets Placing; "Train
+#                        Pawn" (hall selected) queues TrainPawn. A click on a
+#                        button doesn't change the selection.
+#   update-placement.sh  Placing Outbox View: while placing, a left click on
+#                        the map queues PlaceHall at the mouse (world space)
+#                        and ends placing.
+#   update-select.sh     DragStart Units Buildings View Me: left-drag
+#                        selection of this player's units; units win over
+#                        buildings; a drag can't start on the HUD.
+#   update-orders.sh     Units View Outbox Me: right-click queues Move.
+#   apply-commands.sh    Commands Player Units Buildings Gold NextId
 #   update-units.sh      Units DeltaT: walks units toward their targets.
-#   update-scroll.sh     Units View: scrolls the view (the world position of
-#                        the screen's top-left) to keep units near an edge in
-#                        sight. The mouse rests mid-screen, so edge-of-screen
-#                        mouse scrolling alone won't pass.
-#   draw-world.sh        Units Buildings View HallTexture PawnTexture
-#   draw-placement.sh    Placing View HallTexture: the ghost, drawn with a
-#                        color alpha below 1.
-#   draw-minimap.sh      Units Buildings View: must draw something, and change
-#                        when buildings, units or the view change.
-#   draw-hud.sh          Units Buildings Gold Placing: draws "Gold: <n>", the
-#                        buttons (clicking a label's text must hit its button)
-#                        and something that reflects the selection.
+#   update-scroll.sh     Units View Me: scrolls the view (the world position
+#                        of the screen's top-left) to follow walking units.
+#   draw-world.sh        Units Buildings View HallTextures PawnTextures
+#   draw-placement.sh    Placing HallTexture: the ghost, drawn with a color
+#                        alpha below 1.
+#   draw-minimap.sh      Units Buildings View: changes when buildings, units
+#                        or the view change.
+#   draw-hud.sh          Units Buildings Gold Placing Me BuildButton
+#                        TrainButton: "Gold: <n>", the buttons (clicking a
+#                        label's text hits its button) and the selection.
 #
-# Snippets can only use names this file defines. When implementing, add what
-# they need here (a hall hitbox, costs, fields) alongside main.sh, and keep
-# the stubs below in step with the macroquad calls the snippets make.
+# Keep the stubs below in step with the macroquad calls the snippets make.
 
 : "${NSMAP:?set NSMAP (see test.sh)}"
 
@@ -59,40 +61,55 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../src" || exit 1
 
 v=mn_
 # maps
-export ${v}hud_Units=world.units
+export ${v}layout_BuildButton=build_button
+export ${v}layout_TrainButton=train_button
 export ${v}hud_Buildings=world.buildings
-export ${v}hud_Gold=world.gold
+export ${v}hud_Gold=world.gold[world.me]
 export ${v}hud_Placing=world.placing
-export ${v}hud_View=world.view
+export ${v}hud_Outbox=world.outbox
+export ${v}hud_Me=world.me
+export ${v}hud_BuildButton=build_button
+export ${v}hud_TrainButton=train_button
 export ${v}place_Placing=world.placing
-export ${v}place_Buildings=world.buildings
-export ${v}place_Gold=world.gold
+export ${v}place_Outbox=world.outbox
 export ${v}place_View=world.view
 export ${v}select_DragStart=world.drag_start
 export ${v}select_Units=world.units
 export ${v}select_Buildings=world.buildings
 export ${v}select_View=world.view
+export ${v}select_Me=world.me
 export ${v}orders_Units=world.units
 export ${v}orders_View=world.view
+export ${v}orders_Outbox=world.outbox
+export ${v}orders_Me=world.me
+export ${v}apply_Commands=world.outbox
+export ${v}apply_Player=world.me
+export ${v}apply_Units=world.units
+export ${v}apply_Buildings=world.buildings
+export ${v}apply_Gold=world.gold
+export ${v}apply_NextId=world.next_id
 export ${v}units_Units=world.units
 export ${v}units_DeltaT=t
 export ${v}scroll_Units=world.units
 export ${v}scroll_View=world.view
+export ${v}scroll_Me=world.me
 export ${v}world_Units=world.units
 export ${v}world_Buildings=world.buildings
 export ${v}world_View=world.view
-export ${v}world_HallTexture=hall_texture
-export ${v}world_PawnTexture=pawn_texture
+export ${v}world_HallTextures=hall_textures
+export ${v}world_PawnTextures=pawn_textures
 export ${v}ghost_Placing=world.placing
-export ${v}ghost_View=world.view
 export ${v}ghost_HallTexture=hall_texture
 export ${v}minimap_Units=world.units
 export ${v}minimap_Buildings=world.buildings
 export ${v}minimap_View=world.view
 export ${v}drawhud_Units=world.units
 export ${v}drawhud_Buildings=world.buildings
-export ${v}drawhud_Gold=world.gold
+export ${v}drawhud_Gold=world.gold[world.me]
 export ${v}drawhud_Placing=world.placing
+export ${v}drawhud_Me=world.me
+export ${v}drawhud_BuildButton=build_button
+export ${v}drawhud_TrainButton=train_button
 
 cat << EOF
 // Code generated by tests/rts-flow.test.sh. DO NOT EDIT.
@@ -106,56 +123,38 @@ use std::cell::RefCell;
 const SCREEN_W: f32 = 800.0;
 const SCREEN_H: f32 = 600.0;
 
-// relative to the unit's feet, as in the game
-const UNIT_HITBOX: Rect = Rect::new(-24.0, -64.0, 48.0, 64.0);
+EOF
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum BuildingKind {
-    MainHall,
-}
+# the game's constants and types (World, Unit, Building, Command, ...)
+./models.sh
 
-struct Unit {
-    pos: Vec2, // feet, world space
-    target: Vec2,
-    dir: Vec2,
-    speed: f32,
-    hitbox: Rect,
-    selected: bool,
-}
-
-struct Building {
-    kind: BuildingKind,
-    pos: Vec2, // bottom-center, world space
-    hitbox: Rect,
-    selected: bool,
-}
-
-struct World {
-    units: Vec<Unit>,
-    buildings: Vec<Building>,
-    gold: u32,
-    placing: Option<BuildingKind>,
-    drag_start: Option<Vec2>,
-    view: Vec2, // world position of the screen's top-left
-}
+cat << EOF
 
 impl World {
     fn new() -> World {
         let pos = vec2(150.0, 450.0);
         World {
             units: vec![Unit {
+                id: 0,
+                owner: 0,
                 pos,
                 target: pos,
                 dir: Vec2::ZERO,
-                speed: 200.0,
+                speed: UNIT_SPEED,
                 hitbox: UNIT_HITBOX,
                 selected: false,
+                flip: false,
+                running: false,
+                frame: Rect::new(0.0, 0.0, 0.0, 0.0),
             }],
             buildings: vec![],
-            gold: 500,
+            gold: [START_GOLD; 2],
+            me: 0,
             placing: None,
             drag_start: None,
             view: Vec2::ZERO,
+            next_id: 1,
+            outbox: vec![],
         }
     }
 }
@@ -303,14 +302,22 @@ fn set_default_camera() {}
 fn frame(world: &mut World, input: Mouse) -> Vec<Draw> {
     MOUSE.with(|mouse| *mouse.borrow_mut() = input);
     let t = get_frame_time();
-    let hall_texture = "hall".to_string();
-    let pawn_texture = "pawn".to_string();
+    let hall_textures = ["hall".to_string(), "red_hall".to_string()];
+    let hall_texture = hall_textures[world.me].clone();
+    let pawn_textures = [
+        ["pawn".to_string(), "pawn_run".to_string()],
+        ["red_pawn".to_string(), "red_pawn_run".to_string()],
+    ];
 
     // Update
+    ` ./hud-layout.sh ${v}layout_ `
     ` ./update-hud.sh ${v}hud_ `
     ` ./update-placement.sh ${v}place_ `
     ` ./update-select.sh ${v}select_ `
     ` ./update-orders.sh ${v}orders_ `
+    // offline, this frame's orders apply at once (the game's loopback)
+    ` ./apply-commands.sh ${v}apply_ `
+    world.outbox.clear();
     ` ./update-units.sh ${v}units_ `
     ` ./update-scroll.sh ${v}scroll_ `
 

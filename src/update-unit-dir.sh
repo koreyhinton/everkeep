@@ -2,11 +2,11 @@
 
 v=$1
 # maps
-. ${NSMAP}/bind ${v} Unit Sprite DeltaT
+. ${NSMAP}/bind ${v} Unit Sprite DeltaT IdleAnimation RunAnimation
 
 cat << EOF
 
-    if is_mouse_button_pressed(MouseButton::Left) {
+    if is_mouse_button_pressed(MouseButton::Right) {
         let (${v}mouse_x, ${v}mouse_y) = mouse_position();
         ${!unit}.target = vec2(${v}mouse_x, ${v}mouse_y);
     }
@@ -16,10 +16,10 @@ cat << EOF
         // close enough to arrive this frame: snap instead of overshooting
         ${!unit}.pos = ${!unit}.target;
         ${!unit}.dir = Vec2::ZERO;
-        ${!sprite}.set_animation(0); // idle
+        ${!sprite}.animation = &${!idle_animation};
     } else {
         ${!unit}.dir = ${v}to_target.normalize();
-        ${!sprite}.set_animation(1); // run
+        ${!sprite}.animation = &${!run_animation};
         if ${!unit}.dir.x < 0.0 {
             ${!unit}.flip = true;
         } else if ${!unit}.dir.x > 0.0 {

@@ -4,9 +4,12 @@ v=${1:-mn_}
 # maps
 export ${v}res_Resources=resources
 
+export ${v}anim_AnimatedSprite=pawn_sprite
 export ${v}dir_Unit=unit
 export ${v}dir_Sprite=pawn_sprite
 export ${v}dir_DeltaT=t
+export ${v}dir_IdleAnimation=idle_animation
+export ${v}dir_RunAnimation=run_animation
 export ${v}dist_x_Vel=unit.speed
 export ${v}dist_x_T=t
 export ${v}dist_x_D=unit.pos.x
@@ -35,6 +38,13 @@ export ${v}drawunit_Sprite=pawn_sprite
 export ${v}drawunit_IdleTexture=resources.pawn_idle_texture
 export ${v}drawunit_RunTexture=resources.pawn_run_texture
 
+export ${v}drag_DragStart=drag_start
+export ${v}drag_Unit=unit
+export ${v}drag_Houses=houses
+export ${v}sel_Unit=unit
+export ${v}sel_Houses=houses
+export ${v}dragbox_DragStart=drag_start
+
 export ${v}drawsc_Score=score
 export ${v}drawsc_HighScore=high_score
 
@@ -51,7 +61,6 @@ cat << EOF
 
     use macroquad_particles::{AtlasConfig, Emitter, EmitterConfig};
     use quad_storage::STORAGE;
-    use macroquad::experimental::animation::{AnimatedSprite, Animation};
     use macroquad::experimental::coroutines::{start_coroutine, Coroutine};
     use macroquad::Error;
     use macroquad::ui::{hash, root_ui, widgets::Window, Skin};
@@ -62,6 +71,16 @@ cat << EOF
 
     // a house's footprint, relative to its bottom-center position
     const HOUSE_HITBOX: Rect = Rect::new(-56.0, -72.0, 112.0, 72.0);
+
+    // the unit's body, relative to its feet
+    const UNIT_HITBOX: Rect = Rect::new(-24.0, -64.0, 48.0, 64.0);
+
+EOF
+
+# between heredocs, not in backticks, so a version mismatch stops the build
+${ORC_ANIMATE}/models.sh "${ORC_ANIMATE_VERSION}" || exit 1
+
+cat << EOF
 
     enum GameState {
         MainMenu,
@@ -75,11 +94,14 @@ cat << EOF
         dir: Vec2,
         speed: f32,
         flip: bool,
+        hitbox: Rect,
+        selected: bool,
     }
 
     struct Building {
         pos: Vec2, // bottom-center
         hitbox: Rect,
+        selected: bool,
     }
 
     struct Resources {
@@ -119,31 +141,38 @@ cat << EOF
             dir: Vec2::ZERO,
             speed: 200.0,
             flip: false,
+            hitbox: UNIT_HITBOX,
+            selected: false,
         };
+        let mut drag_start: Option<Vec2> = None;
 
         set_pc_assets_folder("assets");
 
         ` ./resources-load-async-loop.sh ${v}res_ `
 
-        let mut pawn_sprite = AnimatedSprite::new(
-            192,
-            192,
-            &[
-                Animation {
-                    name: "idle".to_string(),
-                    row: 0,
-                    frames: 8,
-                    fps: 10,
-                },
-                Animation {
-                    name: "run".to_string(),
-                    row: 0, // run frames are in their own texture
-                    frames: 6,
-                    fps: 10,
-                },
-            ],
-            true,
-        );
+        let idle_animation = Animation {
+            id: "idle".to_string(),
+            row: 0,
+            frames: 8,
+            fps: 10.0,
+        };
+
+        let run_animation = Animation {
+            id: "run".to_string(),
+            row: 0,
+            frames: 6,
+            fps: 10.0,
+        };
+
+        let mut pawn_sprite = AnimatedSprite {
+            w: 192.0,
+            h: 192.0,
+            frame: 0,
+            frame_time: 0.0,
+            animation: &idle_animation,
+            last_animation_id: String::new(),
+            paint_frame: None,
+        };
 
         root_ui().push_skin(&resources.ui_skin);
         let window_size = vec2(370.0, 320.0);
@@ -168,6 +197,8 @@ cat << EOF
                         explosions.clear();
                         unit.pos = vec2(screen_width() / 2.0, screen_height() / 2.0);
                         unit.target = unit.pos;
+                        unit.selected = false;
+                        drag_start = None;
                         score = 0;
                         game_state = GameState::Playing;
                     }
@@ -178,15 +209,19 @@ cat << EOF
                         break 'playing; // pause skips the update til it resumes
                     }
                     ` ./update-unit-dir.sh ${v}dir_ `
+                    ` ./update-drag-select.sh ${v}drag_ `
                     ` ./distance.sh ${v}dist_x_ `
                     ` ./distance.sh ${v}dist_y_ `
-                    pawn_sprite.update();
+
+                    pawn_sprite.frame_time += t;
+                    ` ${ORC_ANIMATE}/snippets/macroquad/animate-sprite.sh ${v}anim_ `
 
                     // place a house just behind the unit, if the spot is free
                     if is_key_pressed(KeyCode::Space) {
                         let new_house = Building {
                             pos: unit.pos - vec2(0.0, 8.0),
                             hitbox: HOUSE_HITBOX,
+                            selected: false,
                         };
                         ` ./get-rect.sh ${v}new_rect_ `
                         let mut blocked = false;
@@ -249,6 +284,8 @@ cat << EOF
                             ` ./draw-house.sh ${v}front_ `
                         }
                     }
+                    ` ./draw-selection.sh ${v}sel_ `
+                    ` ./draw-drag-box.sh ${v}dragbox_ `
                     for (explosion, coords) in explosions.iter_mut() {
                         explosion.draw(*coords);
                     }

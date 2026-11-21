@@ -16,6 +16,7 @@ assets/*
 # orc-generated files
 /src/main.rs
 /src/main.rs.tmp
+/tests/*.rs
 
 # quad_storage
 local.data

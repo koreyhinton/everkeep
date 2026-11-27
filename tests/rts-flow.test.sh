@@ -58,7 +58,14 @@
 #                        rest.
 #   draw-placement.sh    Placing HallTexture: the ghost, drawn with a color
 #                        alpha below 1.
-#   draw-minimap.sh      Units Buildings View Minimap Tiles: trees as tiles;
+#   update-fog.sh        Units Buildings Me Explored Light (refilled): this player's
+#                        sight, and the ground they've explored; rival
+#                        buildings become seen.
+#   draw-fog.sh          Light Explored View FogImage FogTexture: the fog's
+#                        alpha per cell (FogTexture.update records it), drawn
+#                        over the world.
+#   draw-minimap.sh      Units Buildings View Minimap Tiles Me Light
+#                        FogTexture: trees as tiles, the fog;
 #                        changes when buildings, units
 #                        or the view change. The view's outline is on whole
 #                        pixels, at least 2.0 thick.
@@ -133,6 +140,18 @@ export ${v}world_HallTextures=hall_textures
 export ${v}world_PawnTextures=pawn_textures
 export ${v}world_Tiles=tiles
 export ${v}world_TreeTextures=tree_textures
+export ${v}world_Me=world.me
+export ${v}world_Light=light
+export ${v}fog_Units=world.units
+export ${v}fog_Buildings=world.buildings
+export ${v}fog_Me=world.me
+export ${v}fog_Explored=world.explored
+export ${v}fog_Light=light
+export ${v}fogdraw_Light=light
+export ${v}fogdraw_Explored=world.explored
+export ${v}fogdraw_View=world.view
+export ${v}fogdraw_FogImage=fog_image
+export ${v}fogdraw_FogTexture=fog_texture
 export ${v}ghost_Placing=world.placing
 export ${v}ghost_HallTexture=hall_texture
 export ${v}minimap_Units=world.units
@@ -140,6 +159,9 @@ export ${v}minimap_Buildings=world.buildings
 export ${v}minimap_View=world.view
 export ${v}minimap_Minimap=minimap
 export ${v}minimap_Tiles=tiles
+export ${v}minimap_Me=world.me
+export ${v}minimap_Light=light
+export ${v}minimap_FogTexture=fog_texture
 export ${v}drawhud_Units=world.units
 export ${v}drawhud_Buildings=world.buildings
 export ${v}drawhud_Gold=world.gold[world.me]
@@ -202,6 +224,7 @@ impl World {
             objectives: [0; 2],
             // open ground: no trees (TILES draws a map's, for the tree tests)
             grid: PathGrid { w: GRID_W, h: GRID_H, blocked: vec![false; GRID_W * GRID_H] },
+            explored: vec![false; FOG_W * FOG_H],
         }
     }
 }
@@ -223,6 +246,8 @@ thread_local! {
     static MOUSE: RefCell<Mouse> = RefCell::new(Mouse::default());
     static PHASE: RefCell<&'static str> = RefCell::new("");
     static DRAWS: RefCell<Vec<Draw>> = RefCell::new(Vec::new());
+    // the fog's alpha per cell, as draw-fog.sh last uploaded it
+    static FOG: RefCell<Vec<u8>> = RefCell::new(Vec::new());
     // the map tiles frame() draws (none, unless a test sets some)
     static TILES: RefCell<&'static [&'static str]> = const { RefCell::new(&[]) };
 }
@@ -308,13 +333,45 @@ fn record_lines(kind: &'static str, text: &str, texture: &str, rect: Rect, color
     });
 }
 
-fn draw_texture(texture: &String, x: f32, y: f32, color: Color) {
-    record("texture", "", texture, Rect::new(x, y, 0.0, 0.0), color);
+// a texture's name, for the record: the test textures are their names, and
+// the fog's is "fog"
+trait Named {
+    fn name(&self) -> String;
 }
 
-fn draw_texture_ex(texture: &String, x: f32, y: f32, color: Color, params: DrawTextureParams) {
+impl Named for String {
+    fn name(&self) -> String {
+        self.clone()
+    }
+}
+
+// the fog's picture: FOG_W x FOG_H RGBA pixels, like macroquad's Image
+struct FogImage {
+    bytes: Vec<u8>,
+}
+
+// the fog's texture: update keeps the alpha it was given in FOG
+struct FogTexture;
+
+impl FogTexture {
+    fn update(&self, image: &FogImage) {
+        FOG.with(|fog| *fog.borrow_mut() = image.bytes.iter().skip(3).step_by(4).copied().collect());
+    }
+}
+
+impl Named for FogTexture {
+    fn name(&self) -> String {
+        "fog".to_string()
+    }
+}
+
+fn draw_texture(texture: &impl Named, x: f32, y: f32, color: Color) {
+    record("texture", "", &texture.name(), Rect::new(x, y, 0.0, 0.0), color);
+}
+
+fn draw_texture_ex(texture: &impl Named, x: f32, y: f32, color: Color, params: DrawTextureParams) {
     let size = params.dest_size.unwrap_or(Vec2::ZERO);
-    record("texture", "", texture, Rect::new(x, y, size.x, size.y), color);
+    record("texture", "", &texture.name(), Rect::new(x, y, size.x, size.y), color);
 }
 
 fn draw_rectangle(x: f32, y: f32, w: f32, h: f32, color: Color) {
@@ -366,6 +423,8 @@ fn frame(world: &mut World, input: Mouse) -> Vec<Draw> {
     let hall_texture = hall_textures[world.me].clone();
     let tree_textures = ["tree1", "tree2", "tree3", "tree4"].map(String::from);
     let tiles: &[&str] = TILES.with(|tiles| *tiles.borrow());
+    let mut fog_image = FogImage { bytes: vec![0; FOG_W * FOG_H * 4] };
+    let fog_texture = FogTexture;
     let pawn_textures = [
         ["pawn".to_string(), "pawn_run".to_string()],
         ["red_pawn".to_string(), "red_pawn_run".to_string()],
@@ -397,9 +456,15 @@ fn frame(world: &mut World, input: Mouse) -> Vec<Draw> {
     ` ./update-units.sh ${v}units_ `
     ` ./update-scroll.sh ${v}scroll_ `
 
+    // as main.sh: this player's fog, after the sim, before the draw
+    let mut light: Vec<f32> = vec![];
+    ` ./update-fog.sh ${v}fog_ `
+
     // Draw
     PHASE.with(|phase| *phase.borrow_mut() = "world");
     ` ./draw-world.sh ${v}world_ `
+    PHASE.with(|phase| *phase.borrow_mut() = "fog");
+    ` ./draw-fog.sh ${v}fogdraw_ `
     PHASE.with(|phase| *phase.borrow_mut() = "placement");
     ` ./draw-placement.sh ${v}ghost_ `
     PHASE.with(|phase| *phase.borrow_mut() = "dragbox");
@@ -1023,6 +1088,139 @@ fn a_pawn_walks_around_a_hall_in_its_way() {
         assert!(!footprint.contains(world.units[0].pos), "the pawn walked under the hall at {:?}", world.units[0].pos);
     }
     assert_eq!(world.units[0].pos, world.units[0].target, "the pawn didn't get around the hall");
+}
+
+// ---- fog of war ----
+
+// the fog's alpha (0 clear to 255 black) over a world point, as last drawn
+fn fog_at(pos: Vec2) -> u8 {
+    let i = (pos.y / FOG_CELL) as usize * FOG_W + (pos.x / FOG_CELL) as usize;
+    FOG.with(|fog| fog.borrow()[i])
+}
+
+// a unit of player 1's, with a frame so it draws
+fn rival_pawn(id: u32, pos: Vec2) -> Unit {
+    let mut unit = World::new().units.remove(0);
+    unit.id = id;
+    unit.owner = 1;
+    unit.pos = pos;
+    unit.target = pos;
+    unit.frame = Rect::new(0.0, 0.0, 192.0, 192.0);
+    unit
+}
+
+fn rival_hall(id: u32, pos: Vec2) -> Building {
+    Building { id, owner: 1, kind: BuildingKind::MainHall, pos, hitbox: HALL_HITBOX, selected: false, seen: false }
+}
+
+fn textures_in(draws: &[Draw], phase: &str) -> Vec<String> {
+    in_phase(draws, phase).into_iter().filter(|draw| draw.kind == "texture").map(|draw| draw.texture).collect()
+}
+
+#[test]
+fn a_pawn_clears_the_fog_around_it_with_a_soft_edge() {
+    let mut world = World::new();
+    let pawn = world.units[0].pos;
+    frame(&mut world, hover((0.0, 0.0)));
+    assert_eq!(fog_at(pawn), 0, "no fog where the pawn stands");
+    assert_eq!(fog_at(pawn + vec2(SIGHT_RANGE - FOG_FADE, 0.0)), 0, "fog inside the pawn's sight");
+    let edge = fog_at(pawn + vec2(SIGHT_RANGE, 0.0));
+    assert!(edge > 0 && edge < 255, "no soft edge at the sight range (alpha {edge})");
+    assert_eq!(fog_at(pawn + vec2(SIGHT_RANGE + FOG_FADE, 0.0)), 255, "past the pawn's sight isn't black");
+    assert_eq!(fog_at(vec2(2500.0, 2000.0)), 255, "unexplored ground isn't black");
+}
+
+#[test]
+fn explored_ground_stays_dimmed() {
+    let mut world = World::new();
+    let start = world.units[0].pos;
+    frame(&mut world, hover((0.0, 0.0)));
+    world.units[0].pos = vec2(1500.0, 1200.0);
+    world.units[0].target = world.units[0].pos;
+    frame(&mut world, hover((0.0, 0.0)));
+    assert_eq!(fog_at(start), (FOG_DIM * 255.0).round() as u8, "where the pawn was isn't dimmed");
+    assert_eq!(fog_at(vec2(1500.0, 1200.0)), 0, "where the pawn is now isn't clear");
+    assert_eq!(fog_at(vec2(2500.0, 2000.0)), 255, "unexplored ground isn't black");
+}
+
+#[test]
+fn a_rival_pawn_shows_only_in_sight() {
+    let mid = (SCREEN_W / 2.0, SCREEN_H / 2.0);
+    let mut world = World::new();
+    let pawn = world.units[0].pos;
+    world.units.push(rival_pawn(1, pawn + vec2(150.0, 0.0)));
+    let red = |draws: &[Draw], phase: &str| {
+        in_phase(draws, phase)
+            .iter()
+            .filter(|draw| draw.texture.starts_with("red_pawn") || (draw.kind == "circle" && draw.color.r > draw.color.b))
+            .count()
+    };
+    let near = frame(&mut world, hover(mid));
+    assert_eq!(red(&near, "world"), 1, "the rival pawn in sight wasn't drawn");
+    assert_eq!(red(&near, "minimap"), 1, "the rival pawn in sight isn't on the minimap");
+
+    world.units[1].pos = pawn + vec2(SIGHT_RANGE + 200.0, 0.0);
+    world.units[1].target = world.units[1].pos;
+    let far = frame(&mut world, hover(mid));
+    assert_eq!(red(&far, "world"), 0, "the rival pawn in the fog was drawn");
+    assert_eq!(red(&far, "minimap"), 0, "the rival pawn in the fog is on the minimap");
+}
+
+#[test]
+fn a_rival_hall_is_remembered_once_seen() {
+    let mid = (SCREEN_W / 2.0, SCREEN_H / 2.0);
+    let mut world = World::new();
+    // footprint 872..1128: 722 px from the pawn
+    world.buildings.push(rival_hall(5, vec2(1000.0, 450.0)));
+    let hidden = frame(&mut world, hover(mid));
+    assert!(!textures_in(&hidden, "world").contains(&"red_hall".to_string()), "the unseen rival hall was drawn");
+    let minimap_hidden = in_phase(&hidden, "minimap");
+
+    // walk up to it (a 172 px gap), then back
+    world.units[0].pos = vec2(700.0, 450.0);
+    world.units[0].target = world.units[0].pos;
+    let seen = frame(&mut world, hover(mid));
+    assert!(textures_in(&seen, "world").contains(&"red_hall".to_string()), "the rival hall in sight wasn't drawn");
+    world.units[0].pos = vec2(150.0, 450.0);
+    world.units[0].target = world.units[0].pos;
+    let remembered = frame(&mut world, hover(mid));
+    assert!(world.buildings[0].seen);
+    assert!(textures_in(&remembered, "world").contains(&"red_hall".to_string()), "the rival hall was forgotten");
+    assert_eq!(
+        in_phase(&remembered, "minimap").len(),
+        minimap_hidden.len() + 1,
+        "the remembered rival hall isn't on the minimap"
+    );
+}
+
+#[test]
+fn a_hall_clears_the_fog_around_it() {
+    let mut world = World::new();
+    let hall = Building { id: 9, owner: 0, kind: BuildingKind::MainHall, pos: vec2(1600.0, 1200.0), hitbox: HALL_HITBOX, selected: false, seen: false };
+    world.buildings.push(hall);
+    frame(&mut world, hover((0.0, 0.0)));
+    // below its footprint, and beside it
+    assert_eq!(fog_at(vec2(1600.0, 1200.0 + SIGHT_RANGE - FOG_FADE)), 0, "fog below the hall");
+    assert_eq!(fog_at(vec2(1600.0 + 128.0 + SIGHT_RANGE - FOG_FADE, 1150.0)), 0, "fog beside the hall");
+    assert_eq!(fog_at(vec2(1600.0, 1200.0 + SIGHT_RANGE + FOG_FADE)), 255, "the hall sees too far");
+}
+
+#[test]
+fn the_fog_covers_the_world_and_moves_with_the_view() {
+    let mut world = World::new();
+    world.view = vec2(300.0, 200.0);
+    let draws = frame(&mut world, hover((0.0, 0.0)));
+    let fog = in_phase(&draws, "fog").into_iter().find(|draw| draw.texture == "fog").expect("the fog wasn't drawn");
+    assert_eq!(fog.rect, Rect::new(-300.0, -200.0, WORLD_W, WORLD_H));
+}
+
+#[test]
+fn the_minimap_draws_the_fog_over_itself() {
+    let mut world = World::new();
+    let minimap = minimap_rect(&mut world);
+    let draws = frame(&mut world, hover((0.0, 0.0)));
+    let fog = in_phase(&draws, "minimap").into_iter().find(|draw| draw.texture == "fog").expect("the minimap has no fog");
+    assert_eq!(fog.rect, minimap);
 }
 EOF
 

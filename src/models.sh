@@ -111,8 +111,18 @@ cat << 'EOF'
     // the view scrolls to keep a walking unit this far inside its edges
     const SCROLL_MARGIN: f32 = 120.0;
 
-    // a unit sees this far from its feet
+    // a unit sees this far from its feet, and a hall from its footprint
     const SIGHT_RANGE: f32 = 300.0;
+
+    // fog of war, this player's own (never part of the sim): a FOG_CELL grid
+    // over the world. Light fades from 1 to 0 over FOG_FADE, centered on
+    // SIGHT_RANGE. Explored ground out of sight is dimmed to FOG_DIM; ground
+    // never explored is black.
+    const FOG_CELL: f32 = 16.0;
+    const FOG_W: usize = (WORLD_W / FOG_CELL) as usize;
+    const FOG_H: usize = (WORLD_H / FOG_CELL) as usize;
+    const FOG_FADE: f32 = 48.0;
+    const FOG_DIM: f32 = 0.55;
 
     // objectives: each one is a bit in World::objectives
     const OBJ_FIND_RIVAL_HALL: u32 = 1 << 0;
@@ -154,12 +164,13 @@ cat << 'EOF'
         pos: Vec2, // bottom-center, world space
         hitbox: Rect,
         selected: bool,
+        seen: bool, // local: this player has seen it (rival buildings stay drawn once seen)
     }
 
     // Everything the sim changes (units, buildings, gold, next_id, objectives,
     // grid) changes only in the sim snippets, the same way on every player's
-    // machine. The rest is this player's own: selection, placing, the drag
-    // and the view.
+    // machine. The rest is this player's own: selection, placing, the drag,
+    // the view, and the fog (explored, and each building's seen).
     struct World {
         units: Vec<Unit>,
         buildings: Vec<Building>,
@@ -172,6 +183,7 @@ cat << 'EOF'
         outbox: Vec<Command>,     // this player's orders, not yet applied
         objectives: [u32; 2],     // per player: the OBJ_ bits they've completed
         grid: PathGrid,           // GRID_W x GRID_H cells: trees and halls block them
+        explored: Vec<bool>,      // FOG_W x FOG_H fog cells this player has seen
     }
 
     // An order. On the wire: {"op":"move","units":[0,1],"x":740,"y":300}.

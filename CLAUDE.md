@@ -32,7 +32,7 @@ Multiplayer runs both players' sims on each machine (see README "Multiplayer"), 
 
 - Input snippets only push `Command`s to `world.outbox`. `apply-commands.sh` is the only place that changes units, buildings, gold or `next_id`. `update-objectives.sh` is the only place that sets `world.objectives`, each player's completed `OBJ_` bits. `world.grid` (the pathfinding grid) starts from the map's trees in `world-reset.sh`, and `apply-commands.sh` blocks a new hall's cells. Offline, `main.sh` loops the outbox straight back as the current turn's commands.
 - Sim snippets (`apply-commands.sh`, orc's `find-path.sh`, `apply-path.sh`, `update-units.sh`, `update-objectives.sh`, `world-reset.sh`) run in fixed `TICK_SECS` steps and may only depend on commands and sim state: no frame time, mouse, screen size (except `world-reset.sh`'s starting view), clock or `HashMap` order.
-- Selection, placing, the drag and the view are local and never go through commands.
+- Selection, placing, the drag, the view and the fog of war (`update-fog.sh`, `draw-fog.sh`, `world.explored`, `Building::seen`) are local and never go through commands or the checksum. Each player computes only their own fog, every frame.
 - `tests/lockstep.test.sh` checks determinism and the command rules.
 
 ## Don't use `v` as a name

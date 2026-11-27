@@ -20,7 +20,8 @@ A starter RTS. Press Space (or Play) to start, and Escape to pause.
 - Click a unit to select it, or drag a box over units to select every one it touches (units win over buildings; clicking empty ground clears the selection), and right-click to move them. The view scrolls to follow them across the world, and the minimap in the HUD's bottom-left shows the whole world and where you're looking.
 - On the minimap, right-click to send your selected units anywhere in the world (the view follows them as they walk), and left-click or drag to look somewhere else.
 - The map is edged with trees. Units walk around trees and halls (A* pathfinding, from orc's pathfinding library), and a unit sent into the trees stops at their edge. A hall can't be built on trees, on a unit, or hanging off the world's edge, and new pawns step out onto open ground.
-- **Objectives** are listed in the bubble in the top-right, under the map's name (the default map is Winter's Edge). The first is to find the rival's main hall: walk a unit near it and it's checked off, for you only. Offline there's no rival player, so an idle red hall stands at the rival's starting spot instead.
+- **Fog of war:** ground you've never explored is black, and ground you've explored but can't see right now is dimmed. Your units and halls see 300 px around them, with soft edges. Rival units only show while in sight; rival buildings stay drawn once you've seen them. The minimap shows the same fog.
+- **Objectives** are listed in the bubble in the top-right, under the map's name (the default map is Winter's Edge). The first is to find the rival's main hall: once it comes into the sight of one of your units or halls, it's checked off, for you only. Offline there's no rival player, so an idle red hall stands at the rival's starting spot instead.
 
 ## Multiplayer
 

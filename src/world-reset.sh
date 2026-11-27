@@ -23,6 +23,7 @@ cat << EOF
     ${!world}.outbox.clear();
     ${!world}.next_id = 0;
     ${!world}.objectives = [0; 2];
+    ${!world}.explored = vec![false; FOG_W * FOG_H];
 
     // the grid: each tree tile blocks its cells
     ${!world}.grid = PathGrid { w: GRID_W, h: GRID_H, blocked: vec![false; GRID_W * GRID_H] };
@@ -88,6 +89,7 @@ cat << EOF
                 pos: ${v}pos,
                 hitbox: HALL_HITBOX,
                 selected: false,
+                seen: false,
             });
             // its footprint's cells
             let ${v}x0 = ((${v}pos.x + HALL_HITBOX.x) / CELL).floor().max(0.0) as usize;

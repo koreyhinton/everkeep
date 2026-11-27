@@ -93,6 +93,7 @@ fn new_world(players: u32, seed: u64) -> World {
         outbox: vec![],
         objectives: [0; 2],
         grid: PathGrid { w: 0, h: 0, blocked: vec![] },
+        explored: vec![],
     };
     ` ./world-reset.sh ${v}reset_ `
     world
@@ -422,6 +423,28 @@ fn the_objective_is_lockstep() {
     assert_eq!(a.objectives, b.objectives);
     assert_eq!(checksum_of(&a), checksum_of(&b));
     assert_ne!(checksum_of(&a), checksum_before);
+}
+
+// a hall sees too: two halls built within sight of each other find each
+// other, with every unit far away
+#[test]
+fn a_hall_finds_the_rival_hall_in_its_sight() {
+    let mut a = new_world(2, 42);
+    let mut b = new_world(2, 42);
+    let mut confirmed = BTreeMap::new();
+    // footprints 1472..1728 and 1928..2184: a 200 px gap
+    confirmed.insert(0, [
+        vec![Command::PlaceHall { x: 1600, y: 1200 }],
+        vec![Command::PlaceHall { x: 2056, y: 1200 }],
+    ]);
+    run_turns(&mut a, confirmed.clone(), 2);
+    run_turns(&mut b, confirmed, 2);
+    assert_eq!(a.buildings.len(), 2, "both halls should be built");
+    for unit in a.units.iter() {
+        assert!(unit.pos.distance(vec2(1800.0, 1150.0)) > 600.0, "a pawn is near the halls");
+    }
+    assert_eq!(a.objectives, [OBJ_FIND_RIVAL_HALL; 2], "the halls didn't find each other");
+    assert_eq!(checksum_of(&a), checksum_of(&b));
 }
 
 #[test]

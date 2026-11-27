@@ -78,11 +78,25 @@ mutant bug "the minimap ignores the view" src/draw-minimap.sh \
 
 # ---- selection and orders ----
 mutant bug "buildings are selected along with units" src/update-select.sh \
-    's/selected = !\${v}any_unit$/selected = true/'
+    's/selected = !\${v}any_unit && /selected = /'
 mutant bug "a press on the HUD starts a drag" src/update-select.sh \
     's/if \${v}mouse_y < screen_height() - HUD_H {/if true {/'
 mutant bug "the other player's units can be selected" src/update-select.sh \
-    's/selected = \${v}unit\.owner == \${!me}$/selected = true/'
+    's/unit\.selected = \${v}unit\.owner == \${!me} && /unit.selected = /'
+mutant bug "a drag only selects units it encloses" src/update-select.sh \
+    's/\${v}box\.overlaps(&\${v}rect)/${v}box.contains(${v}rect.point()) \&\& ${v}box.contains(${v}rect.point() + ${v}rect.size())/'
+mutant bug "a drag selects a building by its footprint, not its picture" src/update-select.sh \
+    's/\${v}box\.overlaps(&\${v}picture)/${v}box.overlaps(\&Rect::new(${v}building.pos.x + ${v}building.hitbox.x, ${v}building.pos.y + ${v}building.hitbox.y, ${v}building.hitbox.w, ${v}building.hitbox.h))/'
+mutant bug "a click acts like a drag" src/update-select.sh \
+    's/let \${v}click = .*;/let ${v}click = false;/'
+mutant bug "a drag acts like a click" src/update-select.sh \
+    's/let \${v}click = .*;/let ${v}click = true;/'
+mutant bug "a click picks the last unit, not the one in front" src/update-select.sh \
+    's/ && \${v}unit\.pos\.y >= \${v}front//'
+mutant bug "a click on the hall's roof misses it" src/update-select.sh \
+    's/\${v}picture\.contains(\${v}point)/${v}picture.contains(${v}point) \&\& ${v}point.y >= ${v}building.pos.y + HALL_HITBOX.y/'
+mutant bug "a click can pick the other player's unit" src/update-select.sh \
+    's/if \${v}unit\.owner == \${!me} && \${v}rect\.contains/if ${v}rect.contains/'
 mutant bug "the drag is in screen space, not world space" src/update-select.sh \
     's/\(\.min(\${v}end_[xy])\) + \${!view}\.[xy],/\1,/'
 mutant bug "right-click orders no units" src/update-orders.sh \

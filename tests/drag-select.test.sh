@@ -3,17 +3,21 @@
 # Prints the drag-select tests as one Rust file (test.sh writes it to
 # tests/drag_select.rs).
 #
-# The tests play a left-button drag over three frames (press, move, release)
-# through stubbed mouse functions, run update-select.sh each frame, then run
-# draw-world.sh once. As in draw-unit.test.sh, local fns shadow macroquad's
+# The tests play a left-button drag over three frames (press, move, release),
+# or a click over two (press, release), through stubbed mouse functions, run
+# update-select.sh each frame, then run draw-world.sh once. As in draw-unit.test.sh, local fns shadow macroquad's
 # glob import: the mouse and screen stubs read a scripted state, and the
 # draw_rectangle_lines stub records each rectangle instead of drawing it.
 #
 # The interface these tests fix:
 #   update-select.sh  binds DragStart (Option<Vec2>), Units, Buildings, View,
-#       Me. Left press starts a drag (not on the HUD); release selects what
-#       the drag rectangle encloses, of this player's. Units win: if the drag
-#       holds a unit, no building is selected.
+#       Me. Left press starts a drag (not on the HUD); release selects, of
+#       this player's, what the drag rectangle touches: units by hitbox,
+#       buildings by their picture (HALL_TEXTURE_OFFSET, HALL_TEXTURE_SIZE).
+#       A release less than DRAG_THRESHOLD from the press is a click: it selects
+#       the one unit or building under the mouse that's drawn in front (the
+#       lowest feet), or nothing. Units win: if a unit is selected, no
+#       building is.
 #   draw-world.sh     draws one draw_rectangle_lines per selected unit or
 #       building, "nearby": it encloses the hitbox (pos + hitbox, less the
 #       view) with no edge more than NEAR pixels outside it.
@@ -156,10 +160,35 @@ fn drag(from: (f32, f32), to: (f32, f32)) -> [Mouse; 3] {
     ]
 }
 
+// the two mouse states of a left click, released at to (a wobble, if it
+// isn't at the press)
+fn click(at: (f32, f32), to: (f32, f32)) -> Vec<Mouse> {
+    vec![
+        Mouse { pos: at, pressed: true, down: true, released: false },
+        Mouse { pos: to, pressed: false, down: false, released: true },
+    ]
+}
+
 // plays the drag through update-select, then draws the world once
 fn select(
     from: (f32, f32),
     to: (f32, f32),
+    units: &mut Vec<Unit>,
+    buildings: &mut Vec<Building>,
+    view: Vec2,
+    me: usize,
+) -> Vec<Rect> {
+    play(drag(from, to).to_vec(), units, buildings, view, me)
+}
+
+// plays a click at a screen point, as select does a drag
+fn select_at(at: (f32, f32), units: &mut Vec<Unit>, buildings: &mut Vec<Building>) -> Vec<Rect> {
+    play(click(at, at), units, buildings, Vec2::ZERO, 0)
+}
+
+// plays these mouse states through update-select, then draws the world once
+fn play(
+    mice: Vec<Mouse>,
     units: &mut Vec<Unit>,
     buildings: &mut Vec<Building>,
     view: Vec2,
@@ -171,7 +200,7 @@ fn select(
         ["pawn".to_string(), "pawn_run".to_string()],
         ["red_pawn".to_string(), "red_pawn_run".to_string()],
     ];
-    for mouse in drag(from, to) {
+    for mouse in mice {
         set_mouse(mouse);
         ` ./update-select.sh ${v}select_ `
     }
@@ -264,5 +293,137 @@ fn a_drag_that_starts_on_the_hud_selects_nothing_and_keeps_the_selection() {
     select((700.0, 560.0), (720.0, 580.0), &mut units, &mut buildings, Vec2::ZERO, 0);
 
     assert!(units[0].selected, "a click on the HUD cleared the selection");
+}
+
+#[test]
+fn a_drag_that_touches_part_of_a_unit_selects_it() {
+    let mut units = vec![new_unit(0, 0, vec2(300.0, 300.0))];
+    let mut buildings: Vec<Building> = vec![];
+
+    // covers only the unit's left half, (276, 236)-(300, 300)
+    select((250.0, 250.0), (290.0, 280.0), &mut units, &mut buildings, Vec2::ZERO, 0);
+
+    assert!(units[0].selected, "a drag over part of the unit didn't select it");
+}
+
+#[test]
+fn a_drag_over_the_halls_roof_selects_it() {
+    let mut units: Vec<Unit> = vec![];
+    let mut buildings = vec![new_hall(1, 0, vec2(400.0, 400.0))];
+
+    // the hall's footprint is (272, 288)-(528, 400); its picture reaches up
+    // to y 144. This drag only touches the roof.
+    select((380.0, 160.0), (420.0, 200.0), &mut units, &mut buildings, Vec2::ZERO, 0);
+
+    assert!(buildings[0].selected, "a drag over the hall's roof didn't select it");
+}
+
+#[test]
+fn a_drag_near_but_not_touching_selects_nothing() {
+    let mut units = vec![new_unit(0, 0, vec2(300.0, 300.0))];
+    units[0].selected = true;
+    let mut buildings = vec![new_hall(1, 0, vec2(700.0, 400.0))];
+
+    // between the unit (276, 236)-(324, 300) and the hall's picture
+    // (540, 144)-(860, 400)
+    select((340.0, 200.0), (520.0, 300.0), &mut units, &mut buildings, Vec2::ZERO, 0);
+
+    assert!(!units[0].selected && !buildings[0].selected, "a drag over nothing selected something");
+}
+
+#[test]
+fn a_click_on_a_unit_selects_only_it() {
+    let mut units = vec![new_unit(0, 0, vec2(300.0, 300.0)), new_unit(1, 0, vec2(400.0, 300.0))];
+    units[1].selected = true;
+    let mut buildings: Vec<Building> = vec![];
+
+    let rects = select_at((300.0, 270.0), &mut units, &mut buildings);
+
+    assert!(units[0].selected, "clicking the unit didn't select it");
+    assert!(!units[1].selected, "clicking a unit kept the other one selected");
+    assert_eq!(rects.len(), 1);
+    assert_nearby(rects[0], screen_hitbox(units[0].pos, units[0].hitbox, Vec2::ZERO));
+}
+
+#[test]
+fn a_click_on_the_halls_roof_selects_it() {
+    let mut units: Vec<Unit> = vec![];
+    let mut buildings = vec![new_hall(1, 0, vec2(400.0, 400.0))];
+
+    // above the footprint (which starts at y 288), on the picture
+    select_at((400.0, 180.0), &mut units, &mut buildings);
+
+    assert!(buildings[0].selected, "clicking the hall's roof didn't select it");
+}
+
+#[test]
+fn a_click_on_empty_ground_clears_the_selection() {
+    let mut units = vec![new_unit(0, 0, vec2(300.0, 300.0))];
+    units[0].selected = true;
+    let mut buildings = vec![new_hall(1, 0, vec2(700.0, 400.0))];
+    buildings[0].selected = true;
+
+    select_at((100.0, 100.0), &mut units, &mut buildings);
+
+    assert!(!units[0].selected && !buildings[0].selected, "clicking empty ground kept the selection");
+}
+
+#[test]
+fn a_unit_in_front_of_the_hall_wins_the_click() {
+    // the unit stands on the hall's picture
+    let mut units = vec![new_unit(0, 0, vec2(400.0, 250.0))];
+    let mut buildings = vec![new_hall(1, 0, vec2(400.0, 400.0))];
+
+    select_at((400.0, 220.0), &mut units, &mut buildings);
+
+    assert!(units[0].selected, "the unit in front of the hall wasn't selected");
+    assert!(!buildings[0].selected, "the hall was selected along with the unit");
+}
+
+#[test]
+fn the_unit_drawn_in_front_wins_a_click() {
+    // overlapping hitboxes; the second unit's feet are lower, so it draws on
+    // top. It comes first, so the click can't just take the last match.
+    let mut units = vec![new_unit(0, 0, vec2(310.0, 320.0)), new_unit(1, 0, vec2(300.0, 300.0))];
+    let mut buildings: Vec<Building> = vec![];
+
+    select_at((305.0, 280.0), &mut units, &mut buildings);
+
+    assert!(units[0].selected, "the unit in front wasn't selected");
+    assert!(!units[1].selected, "the unit behind was selected too");
+}
+
+#[test]
+fn a_small_wobble_is_still_a_click() {
+    let mut units = vec![new_unit(0, 0, vec2(310.0, 320.0)), new_unit(1, 0, vec2(300.0, 300.0))];
+    let mut buildings: Vec<Building> = vec![];
+
+    // a 3x2 pixel wobble touches both units, but is a click
+    play(click((305.0, 280.0), (308.0, 282.0)), &mut units, &mut buildings, Vec2::ZERO, 0);
+
+    assert!(units[0].selected && !units[1].selected, "a wobbled click selected like a drag");
+}
+
+#[test]
+fn a_click_passes_over_the_other_players_units() {
+    // the rival's unit is in front; this player's, behind it, gets the click
+    let mut units = vec![new_unit(0, 0, vec2(300.0, 300.0)), new_unit(1, 1, vec2(310.0, 320.0))];
+    let mut buildings: Vec<Building> = vec![];
+
+    select_at((305.0, 280.0), &mut units, &mut buildings);
+
+    assert!(units[0].selected, "this player's unit behind the rival's wasn't selected");
+    assert!(!units[1].selected, "the other player's unit was selected");
+}
+
+#[test]
+fn a_click_in_world_space_when_the_view_has_scrolled() {
+    // world (1300, 900) is screen (300, 300) with this view
+    let mut units = vec![new_unit(0, 0, vec2(1300.0, 900.0))];
+    let mut buildings: Vec<Building> = vec![];
+
+    play(click((300.0, 270.0), (300.0, 270.0)), &mut units, &mut buildings, vec2(1000.0, 600.0), 0);
+
+    assert!(units[0].selected, "the click missed the unit with the view scrolled");
 }
 EOF

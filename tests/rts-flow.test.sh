@@ -318,8 +318,11 @@ fn frame(world: &mut World, input: Mouse) -> Vec<Draw> {
     // Update
     ` ./hud-layout.sh ${v}layout_ `
     ` ./update-hud.sh ${v}hud_ `
+    // as main.sh: the click that places a hall doesn't select
+    if world.placing.is_none() {
+        ` ./update-select.sh ${v}select_ `
+    }
     ` ./update-placement.sh ${v}place_ `
-    ` ./update-select.sh ${v}select_ `
     ` ./update-orders.sh ${v}orders_ `
     // offline, this frame's orders apply at once (the game's loopback)
     ` ./apply-commands.sh ${v}apply_ `
@@ -636,4 +639,18 @@ fn the_objectives_bubble_checks_off_finding_the_rival_hall() {
         .expect("the objective disappeared once it was done");
     assert_ne!(label.color, open_color, "a done objective looks the same as an open one");
 }
+
+// the click that places a hall doesn't also click-select what's under it
+#[test]
+fn placing_a_hall_on_a_pawn_doesnt_select_the_pawn() {
+    let mid = (SCREEN_W / 2.0, SCREEN_H / 2.0);
+    let mut world = World::new();
+    let build = button(&frame(&mut world, hover(mid)), "Build Main Hall");
+    play(&mut world, left_click(build));
+    // on the pawn's body (its feet are at (150, 450))
+    play(&mut world, left_click((150.0, 430.0)));
+    assert_eq!(world.buildings.len(), 1, "the hall wasn't placed");
+    assert!(!world.units[0].selected, "the click that placed the hall selected the pawn");
+}
 EOF
+

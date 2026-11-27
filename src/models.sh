@@ -39,6 +39,11 @@ cat << 'EOF'
     // its 320x256 texture's offset from that position
     const HALL_HITBOX: Rect = Rect::new(-128.0, -112.0, 256.0, 112.0);
     const HALL_TEXTURE_OFFSET: Vec2 = Vec2::new(-160.0, -256.0);
+    const HALL_TEXTURE_SIZE: Vec2 = Vec2::new(320.0, 256.0);
+
+    // a left press and release closer than this (screen pixels) is a click,
+    // not a drag
+    const DRAG_THRESHOLD: f32 = 5.0;
 
     // economy
     const START_GOLD: u32 = 500;

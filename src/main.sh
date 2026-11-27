@@ -297,8 +297,12 @@ cat << EOF
                     }
                     // input only queues orders in world.outbox; the sim applies them on a turn
                     ` ./update-hud.sh ${v}hud_ `
+                    // the click that places a hall doesn't select (selection
+                    // runs first, while not placing; placing ends on the press)
+                    if world.placing.is_none() {
+                        ` ./update-select.sh ${v}select_ `
+                    }
                     ` ./update-placement.sh ${v}place_ `
-                    ` ./update-select.sh ${v}select_ `
                     ` ./update-orders.sh ${v}orders_ `
                 }
                 GameState::Paused => {

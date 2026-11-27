@@ -19,6 +19,7 @@ A starter RTS. Press Space (or Play) to start, and Escape to pause.
 - Click your hall (or drag a box over it) to select it, then **Train Pawn** (50 gold) to add a pawn next to it.
 - Click a unit to select it, or drag a box over units to select every one it touches (units win over buildings; clicking empty ground clears the selection), and right-click to move them. The view scrolls to follow them across the world, and the minimap in the HUD's bottom-left shows the whole world and where you're looking.
 - On the minimap, right-click to send your selected units anywhere in the world (the view follows them as they walk), and left-click or drag to look somewhere else.
+- The map is edged with trees. Units walk around trees and halls (A* pathfinding, from orc's pathfinding library), and a unit sent into the trees stops at their edge. A hall can't be built on trees, on a unit, or hanging off the world's edge, and new pawns step out onto open ground.
 - **Objectives** are listed in the bubble in the top-right, under the map's name (the default map is Winter's Edge). The first is to find the rival's main hall: walk a unit near it and it's checked off, for you only. Offline there's no rival player, so an idle red hall stands at the rival's starting spot instead.
 
 ## Multiplayer
@@ -40,7 +41,7 @@ cargo run -- --server http://localhost:8080
 
 The Multiplayer button only shows on desktop when `--server` is given. In the browser it connects to port 8080 on the page's host, or to `?server=URL`.
 
-The websocket and HTTP code comes from orc's Rust ws library (`ORC_WS`, set in `orc-env.sh`), adapted from sharecmd's Rust demo client.
+The websocket and HTTP code comes from orc's Rust ws library (`ORC_WS`, set in `orc-env.sh`), adapted from sharecmd's Rust demo client. Paths come from orc's pathfinding library (`ORC_PATHFINDING`), whose A* breaks ties the same way on every machine, so both players' units take the same paths.
 
 ## Build and run
 

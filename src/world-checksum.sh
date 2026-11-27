@@ -24,7 +24,11 @@ cat << EOF
             ${v}unit.pos.y.to_bits(),
             ${v}unit.target.x.to_bits(),
             ${v}unit.target.y.to_bits(),
+            ${v}unit.path.len() as u32,
         ]);
+        for ${v}point in ${v}unit.path.iter() {
+            ${v}words.extend([${v}point.x.to_bits(), ${v}point.y.to_bits()]);
+        }
     }
     for ${v}building in ${!world}.buildings.iter() {
         ${v}words.extend([

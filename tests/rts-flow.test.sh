@@ -51,10 +51,15 @@
 #   update-scroll.sh     Units View Me: scrolls the view (the world position
 #                        of the screen's top-left) to follow walking units
 #                        that are on screen.
-#   draw-world.sh        Units Buildings View HallTextures PawnTextures
+#   find-path.sh, apply-path.sh: the paths for units given new orders, as
+#                        main.sh finds them after the commands.
+#   draw-world.sh        Units Buildings View HallTextures PawnTextures Tiles
+#                        TreeTextures: trees drawn back to front with the
+#                        rest.
 #   draw-placement.sh    Placing HallTexture: the ghost, drawn with a color
 #                        alpha below 1.
-#   draw-minimap.sh      Units Buildings View: changes when buildings, units
+#   draw-minimap.sh      Units Buildings View Minimap Tiles: trees as tiles;
+#                        changes when buildings, units
 #                        or the view change. The view's outline is on whole
 #                        pixels, at least 2.0 thick.
 #   draw-drag-box.sh     DragStart: the drag box, outlined like the minimap's
@@ -106,6 +111,16 @@ export ${v}apply_Units=world.units
 export ${v}apply_Buildings=world.buildings
 export ${v}apply_Gold=world.gold
 export ${v}apply_NextId=world.next_id
+export ${v}apply_Grid=world.grid
+export ${v}path_Grid=world.grid
+export ${v}path_Start=path_start
+export ${v}path_Goal=path_goal
+export ${v}path_Path=path_cells
+export ${v}path_Found=path_found
+export ${v}applypath_Unit=world.units[unit_i]
+export ${v}applypath_Cells=path_cells
+export ${v}applypath_Found=path_found
+export ${v}applypath_Grid=world.grid
 export ${v}units_Units=world.units
 export ${v}units_DeltaT=t
 export ${v}scroll_Units=world.units
@@ -116,12 +131,15 @@ export ${v}world_Buildings=world.buildings
 export ${v}world_View=world.view
 export ${v}world_HallTextures=hall_textures
 export ${v}world_PawnTextures=pawn_textures
+export ${v}world_Tiles=tiles
+export ${v}world_TreeTextures=tree_textures
 export ${v}ghost_Placing=world.placing
 export ${v}ghost_HallTexture=hall_texture
 export ${v}minimap_Units=world.units
 export ${v}minimap_Buildings=world.buildings
 export ${v}minimap_View=world.view
 export ${v}minimap_Minimap=minimap
+export ${v}minimap_Tiles=tiles
 export ${v}drawhud_Units=world.units
 export ${v}drawhud_Buildings=world.buildings
 export ${v}drawhud_Gold=world.gold[world.me]
@@ -147,8 +165,10 @@ const SCREEN_H: f32 = 600.0;
 
 EOF
 
-# the game's constants and types (World, Unit, Building, Command, ...)
+# the game's constants and types (World, Unit, Building, Command, ...), and
+# orc pathfinding's PathGrid
 ./models.sh
+${ORC_PATHFINDING}/models.sh "${ORC_PATHFINDING_VERSION}" || exit 1
 
 cat << EOF
 
@@ -168,6 +188,8 @@ impl World {
                 flip: false,
                 running: false,
                 frame: Rect::new(0.0, 0.0, 0.0, 0.0),
+                path: vec![],
+                repath: false,
             }],
             buildings: vec![],
             gold: [START_GOLD; 2],
@@ -178,6 +200,8 @@ impl World {
             next_id: 1,
             outbox: vec![],
             objectives: [0; 2],
+            // open ground: no trees (TILES draws a map's, for the tree tests)
+            grid: PathGrid { w: GRID_W, h: GRID_H, blocked: vec![false; GRID_W * GRID_H] },
         }
     }
 }
@@ -199,6 +223,8 @@ thread_local! {
     static MOUSE: RefCell<Mouse> = RefCell::new(Mouse::default());
     static PHASE: RefCell<&'static str> = RefCell::new("");
     static DRAWS: RefCell<Vec<Draw>> = RefCell::new(Vec::new());
+    // the map tiles frame() draws (none, unless a test sets some)
+    static TILES: RefCell<&'static [&'static str]> = const { RefCell::new(&[]) };
 }
 
 fn mouse() -> Mouse {
@@ -243,6 +269,11 @@ fn screen_height() -> f32 {
 
 fn get_frame_time() -> f32 {
     1.0 / 60.0
+}
+
+// draw-world.sh sways trees by the clock
+fn get_time() -> f64 {
+    0.0
 }
 
 // ---- draw stubs: record instead of drawing ----
@@ -333,6 +364,8 @@ fn frame(world: &mut World, input: Mouse) -> Vec<Draw> {
     let t = get_frame_time();
     let hall_textures = ["hall".to_string(), "red_hall".to_string()];
     let hall_texture = hall_textures[world.me].clone();
+    let tree_textures = ["tree1", "tree2", "tree3", "tree4"].map(String::from);
+    let tiles: &[&str] = TILES.with(|tiles| *tiles.borrow());
     let pawn_textures = [
         ["pawn".to_string(), "pawn_run".to_string()],
         ["red_pawn".to_string(), "red_pawn_run".to_string()],
@@ -351,6 +384,16 @@ fn frame(world: &mut World, input: Mouse) -> Vec<Draw> {
     // offline, this frame's orders apply at once (the game's loopback)
     ` ./apply-commands.sh ${v}apply_ `
     world.outbox.clear();
+    for unit_i in 0..world.units.len() {
+        if world.units[unit_i].repath {
+            let unit_pos = world.units[unit_i].pos;
+            let unit_target = world.units[unit_i].target;
+            let path_start = ((unit_pos.x / CELL) as usize, (unit_pos.y / CELL) as usize);
+            let path_goal = ((unit_target.x / CELL) as usize, (unit_target.y / CELL) as usize);
+            ` ${ORC_PATHFINDING}/snippets/find-path.sh ${v}path_ `
+            ` ./apply-path.sh ${v}applypath_ `
+        }
+    }
     ` ./update-units.sh ${v}units_ `
     ` ./update-scroll.sh ${v}scroll_ `
 
@@ -586,12 +629,14 @@ fn build_a_hall_train_a_pawn_and_move_both_to_a_scrolled_view() {
     assert_ne!(in_phase(&draws, "minimap"), minimap_before_move, "the minimap didn't show the move");
 
     // 8. with the view scrolled, a second hall lands where it's clicked, in
-    // world space
+    // world space (below the first, a cell clear of it: halls block every
+    // pathfinding cell their footprint touches)
     let build = button(&draws, "Build Main Hall");
+    let spot = (mid.0, mid.1 + 80.0);
     play(&mut world, left_click(build));
-    play(&mut world, left_click(mid));
+    play(&mut world, left_click(spot));
     assert_eq!(world.buildings.len(), 2, "the second hall wasn't placed");
-    let expected = vec2(mid.0, mid.1) + world.view;
+    let expected = vec2(spot.0, spot.1) + world.view;
     assert!(
         world.buildings[1].pos.distance(expected) <= 1.0,
         "the hall is at {:?}, not under the mouse at {expected:?} (view {:?})",
@@ -867,6 +912,117 @@ fn looking_away_doesnt_snap_back_to_walking_units() {
     }
     assert!(world.units[0].running, "the pawn should still be walking");
     assert_eq!(world.view, looking, "the view snapped back to the walking pawn");
+}
+
+// ---- trees ----
+
+// a 3 x 3 tile map with one tree in the middle tile, (64, 64)-(128, 128)
+const ONE_TREE: &[&str] = &["...", ".T.", "..."];
+
+#[test]
+fn trees_are_drawn_back_to_front_with_units() {
+    let mid = (SCREEN_W / 2.0, SCREEN_H / 2.0);
+    let mut world = World::new();
+    // one pawn behind the tree (feet above its tile's bottom), one in front
+    world.units[0].pos = vec2(96.0, 100.0);
+    world.units[0].target = world.units[0].pos;
+    let mut front = World::new().units.remove(0);
+    front.id = 1;
+    front.pos = vec2(96.0, 160.0);
+    front.target = front.pos;
+    world.units.push(front);
+    // units only draw once their sprite has a frame
+    for unit in world.units.iter_mut() {
+        unit.frame = Rect::new(0.0, 0.0, 192.0, 192.0);
+    }
+    world.view = Vec2::ZERO;
+    TILES.with(|tiles| *tiles.borrow_mut() = ONE_TREE);
+    let draws = frame(&mut world, hover(mid));
+    TILES.with(|tiles| *tiles.borrow_mut() = &[]);
+
+    let textures: Vec<Draw> = in_phase(&draws, "world").into_iter().filter(|draw| draw.kind == "texture").collect();
+    let trees: Vec<&Draw> = textures.iter().filter(|draw| draw.texture.starts_with("tree")).collect();
+    assert_eq!(trees.len(), 1, "expected one tree, drew {textures:?}");
+    // centered on its tile
+    let tree = trees[0];
+    assert_eq!(tree.rect.x + 96.0, 96.0, "the tree isn't centered on its tile");
+    let order: Vec<f32> = textures
+        .iter()
+        .map(|draw| if draw.texture.starts_with("tree") { 128.0 } else { draw.rect.y + 128.0 })
+        .collect();
+    assert_eq!(order, vec![100.0, 128.0, 160.0], "not drawn back to front: {textures:?}");
+}
+
+#[test]
+fn trees_move_with_the_view() {
+    let mid = (SCREEN_W / 2.0, SCREEN_H / 2.0);
+    let mut world = World::new();
+    world.view = vec2(40.0, 20.0);
+    TILES.with(|tiles| *tiles.borrow_mut() = ONE_TREE);
+    let draws = frame(&mut world, hover(mid));
+    TILES.with(|tiles| *tiles.borrow_mut() = &[]);
+    let tree = in_phase(&draws, "world")
+        .into_iter()
+        .find(|draw| draw.texture.starts_with("tree"))
+        .expect("the tree wasn't drawn");
+    // its tile's center is at world x 96, so its 192-wide picture starts at
+    // 0, less the view
+    assert_eq!(tree.rect.x, -40.0, "the tree didn't move with the view");
+}
+
+#[test]
+fn trees_off_screen_arent_drawn() {
+    let mid = (SCREEN_W / 2.0, SCREEN_H / 2.0);
+    let mut world = World::new();
+    world.view = vec2(1500.0, 1200.0);
+    TILES.with(|tiles| *tiles.borrow_mut() = ONE_TREE);
+    let draws = frame(&mut world, hover(mid));
+    TILES.with(|tiles| *tiles.borrow_mut() = &[]);
+    assert!(
+        !in_phase(&draws, "world").iter().any(|draw| draw.texture.starts_with("tree")),
+        "a tree far off screen was drawn"
+    );
+}
+
+#[test]
+fn the_minimap_shows_trees() {
+    let mid = (SCREEN_W / 2.0, SCREEN_H / 2.0);
+    let mut world = World::new();
+    let bare = in_phase(&frame(&mut world, hover(mid)), "minimap");
+    TILES.with(|tiles| *tiles.borrow_mut() = ONE_TREE);
+    let draws = frame(&mut world, hover(mid));
+    TILES.with(|tiles| *tiles.borrow_mut() = &[]);
+    let minimap = minimap_rect(&mut world);
+    let scale = minimap.w / WORLD_W;
+    let with_tree = in_phase(&draws, "minimap");
+    assert_eq!(with_tree.len(), bare.len() + 1, "the minimap didn't draw the tree");
+    assert!(
+        with_tree.iter().any(|draw| draw.kind == "rect"
+            && draw.rect.x == minimap.x + TILE * scale
+            && draw.rect.y == minimap.y + TILE * scale),
+        "the tree isn't at its tile on the minimap"
+    );
+}
+
+// a Move walks around a hall in the way, never under it
+#[test]
+fn a_pawn_walks_around_a_hall_in_its_way() {
+    let mut world = World::new();
+    world.units[0].pos = vec2(200.0, 300.0);
+    world.units[0].target = world.units[0].pos;
+    world.units[0].selected = true;
+    // a hall between the pawn and where it's sent
+    world.outbox.push(Command::PlaceHall { x: 400, y: 340 });
+    frame(&mut world, hover((0.0, 0.0)));
+    assert_eq!(world.buildings.len(), 1);
+    let hall = &world.buildings[0];
+    let footprint = Rect::new(hall.pos.x + hall.hitbox.x, hall.pos.y + hall.hitbox.y, hall.hitbox.w, hall.hitbox.h);
+    play(&mut world, right_click((620.0, 300.0)));
+    for _ in 0..300 {
+        frame(&mut world, hover((0.0, 0.0)));
+        assert!(!footprint.contains(world.units[0].pos), "the pawn walked under the hall at {:?}", world.units[0].pos);
+    }
+    assert_eq!(world.units[0].pos, world.units[0].target, "the pawn didn't get around the hall");
 }
 EOF
 

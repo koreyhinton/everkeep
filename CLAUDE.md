@@ -23,14 +23,15 @@ cargo run
 - Map a snippet's inputs to Rust names in `main.sh` with exports (`export ${v}units_Units=world.units`). Inside the snippet, bind them with `. ${NSMAP}/bind ${v} Units DeltaT` and use them as `${!units}`, `${!delta_t}`.
 - Outputs left unmapped get the namespaced name (`mn_join_Post`).
 - App snippets don't need orc's interface header comment. That's only for reusable snippets added to the orc library.
-- orc libraries used: animation (`ORC_ANIMATE`) and the Rust ws client (`ORC_WS`), both set in `orc-env.sh`. Their `models.sh` run between heredocs in `main.sh` so a version mismatch stops the build.
+- orc libraries used: animation (`ORC_ANIMATE`), the Rust ws client (`ORC_WS`) and A* pathfinding (`ORC_PATHFINDING`), all set in `orc-env.sh`. Their `models.sh` run between heredocs in `main.sh` (and pathfinding's in the tests too, since `World` holds a `PathGrid`) so a version mismatch stops the build.
+- Snippets never call other snippets, so `main.sh` calls orc's `find-path.sh` itself, then `apply-path.sh`, for each unit marked `repath` after a turn's commands. The tests repeat that loop.
 
 ## The sim is lockstep
 
 Multiplayer runs both players' sims on each machine (see README "Multiplayer"), so they must stay identical.
 
-- Input snippets only push `Command`s to `world.outbox`. `apply-commands.sh` is the only place that changes units, buildings, gold or `next_id`. `update-objectives.sh` is the only place that sets `world.objectives`, each player's completed `OBJ_` bits. Offline, `main.sh` loops the outbox straight back as the current turn's commands.
-- Sim snippets (`apply-commands.sh`, `update-units.sh`, `update-objectives.sh`, `world-reset.sh`) run in fixed `TICK_SECS` steps and may only depend on commands and sim state: no frame time, mouse, screen size (except `world-reset.sh`'s starting view), clock or `HashMap` order.
+- Input snippets only push `Command`s to `world.outbox`. `apply-commands.sh` is the only place that changes units, buildings, gold or `next_id`. `update-objectives.sh` is the only place that sets `world.objectives`, each player's completed `OBJ_` bits. `world.grid` (the pathfinding grid) starts from the map's trees in `world-reset.sh`, and `apply-commands.sh` blocks a new hall's cells. Offline, `main.sh` loops the outbox straight back as the current turn's commands.
+- Sim snippets (`apply-commands.sh`, orc's `find-path.sh`, `apply-path.sh`, `update-units.sh`, `update-objectives.sh`, `world-reset.sh`) run in fixed `TICK_SECS` steps and may only depend on commands and sim state: no frame time, mouse, screen size (except `world-reset.sh`'s starting view), clock or `HashMap` order.
 - Selection, placing, the drag and the view are local and never go through commands.
 - `tests/lockstep.test.sh` checks determinism and the command rules.
 

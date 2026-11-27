@@ -2,7 +2,7 @@
 
 v=$1
 # maps
-. ${NSMAP}/bind ${v} Units Buildings View Minimap
+. ${NSMAP}/bind ${v} Units Buildings View Minimap Tiles
 
 cat << EOF
 
@@ -12,6 +12,22 @@ cat << EOF
     let ${v}scale = ${v}map.w / WORLD_W;
     let ${v}colors = [Color::from_rgba(80, 140, 255, 255), Color::from_rgba(255, 90, 80, 255)];
     draw_rectangle(${v}map.x, ${v}map.y, ${v}map.w, ${v}map.h, Color::from_rgba(70, 110, 60, 255));
+    // trees, as darker green tiles (clipped to the world)
+    for (${v}row, ${v}line) in ${!tiles}.iter().enumerate() {
+        for (${v}col, ${v}tile) in ${v}line.chars().enumerate() {
+            let ${v}x = ${v}col as f32 * TILE;
+            let ${v}y = ${v}row as f32 * TILE;
+            if ${v}tile == 'T' && ${v}x < WORLD_W && ${v}y < WORLD_H {
+                draw_rectangle(
+                    ${v}map.x + ${v}x * ${v}scale,
+                    ${v}map.y + ${v}y * ${v}scale,
+                    TILE.min(WORLD_W - ${v}x) * ${v}scale,
+                    TILE.min(WORLD_H - ${v}y) * ${v}scale,
+                    Color::from_rgba(35, 70, 40, 255),
+                );
+            }
+        }
+    }
     for ${v}building in ${!buildings}.iter() {
         draw_rectangle(
             ${v}map.x + ${v}building.pos.x * ${v}scale - 3.0,

@@ -13,6 +13,8 @@ cat << EOF
     // each spread up to 100 px. SplitMix64: the same on every platform and
     // Rust version. Offline there's no rival, so an idle red hall stands at
     // player 1's spot, for the first objective (find the rival's main hall).
+    // The pathfinding grid starts from the Map's trees, and halls block the
+    // cells under their footprint.
     ${!world}.units.clear();
     ${!world}.buildings.clear();
     ${!world}.gold = [START_GOLD; 2];
@@ -21,6 +23,21 @@ cat << EOF
     ${!world}.outbox.clear();
     ${!world}.next_id = 0;
     ${!world}.objectives = [0; 2];
+
+    // the grid: each tree tile blocks its cells
+    ${!world}.grid = PathGrid { w: GRID_W, h: GRID_H, blocked: vec![false; GRID_W * GRID_H] };
+    let ${v}per_tile = (TILE / CELL) as usize;
+    for (${v}row, ${v}line) in ${!map}.tiles.iter().enumerate() {
+        for (${v}col, ${v}tile) in ${v}line.chars().enumerate() {
+            for ${v}cy in ${v}row * ${v}per_tile..(${v}row + 1) * ${v}per_tile {
+                for ${v}cx in ${v}col * ${v}per_tile..(${v}col + 1) * ${v}per_tile {
+                    if ${v}tile == 'T' && ${v}cx < GRID_W && ${v}cy < GRID_H {
+                        ${!world}.grid.blocked[${v}cy * GRID_W + ${v}cx] = true;
+                    }
+                }
+            }
+        }
+    }
     let mut ${v}rng: u64 = ${!seed} as u64;
 
     // shuffle the spawn spots (Fisher-Yates)
@@ -60,6 +77,8 @@ cat << EOF
                 flip: false,
                 running: false,
                 frame: Rect::new(0.0, 0.0, 0.0, 0.0),
+                path: vec![],
+                repath: false,
             });
         } else {
             ${!world}.buildings.push(Building {
@@ -70,6 +89,16 @@ cat << EOF
                 hitbox: HALL_HITBOX,
                 selected: false,
             });
+            // its footprint's cells
+            let ${v}x0 = ((${v}pos.x + HALL_HITBOX.x) / CELL).floor().max(0.0) as usize;
+            let ${v}y0 = ((${v}pos.y + HALL_HITBOX.y) / CELL).floor().max(0.0) as usize;
+            let ${v}x1 = (((${v}pos.x + HALL_HITBOX.right()) / CELL).ceil().max(0.0) as usize).min(GRID_W);
+            let ${v}y1 = (((${v}pos.y + HALL_HITBOX.bottom()) / CELL).ceil().max(0.0) as usize).min(GRID_H);
+            for ${v}cy in ${v}y0..${v}y1 {
+                for ${v}cx in ${v}x0..${v}x1 {
+                    ${!world}.grid.blocked[${v}cy * GRID_W + ${v}cx] = true;
+                }
+            }
         }
         ${!world}.next_id += 1;
     }

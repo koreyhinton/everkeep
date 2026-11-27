@@ -46,7 +46,8 @@ mutant() { MT_KINDS+=("$1"); MT_NAMES+=("$2"); MT_FILES+=("$3"); MT_SEDS+=("$4")
 # ---- not implemented: each snippet the integration tests inline ----
 for snippet in hud-layout update-hud update-placement update-select update-orders \
     apply-commands update-units update-scroll draw-world draw-placement draw-minimap \
-    draw-hud update-unit-frame world-reset world-checksum net-recv net-turn-msg; do
+    draw-hud update-unit-frame world-reset world-checksum net-recv net-turn-msg \
+    update-objectives draw-objectives draw-drag-box update-minimap-view; do
     mutant missing "${snippet}.sh not written" "src/${snippet}.sh" '/^cat << EOF$/,/^EOF$/d'
 done
 mutant missing "orc websockets not wired in" "orc-env.sh build-web.sh src/main.sh" '/ORC_WS/d'
@@ -72,18 +73,54 @@ mutant bug "the HUD doesn't show what's selected" src/draw-hud.sh \
     's/^\( *\)"\(1 Pawn\|Main Hall\)"\.to_string()/\1"Nothing selected".to_string()/; s/format!("{} Pawns", \${v}pawns)/"Nothing selected".to_string()/'
 mutant bug "the minimap ignores units" src/draw-minimap.sh \
     's/\${v}unit\.pos\.\([xy]\) \* \${v}scale/0.0/'
+mutant bug "the minimap's view outline is 1.0 thick" src/draw-minimap.sh \
+    's/^        2\.0,$/        1.0,/'
+mutant bug "the minimap's view outline is on fractional pixels" src/draw-minimap.sh \
+    's/\(let \${v}view_[a-z]* = .*\)\.round();/\1;/'
+mutant bug "the drag box outline is 1.0 thick" src/draw-drag-box.sh \
+    's/, 2\.0, WHITE);/, 1.0, WHITE);/'
+mutant bug "the drag box outline is on fractional pixels" src/draw-drag-box.sh \
+    's/\.round()//g'
 mutant bug "the minimap ignores the view" src/draw-minimap.sh \
-    's/\${!view}\.\([xy]\) \* \${v}scale/0.0/'
+    's/\${!view}\.[xy]/0.0/g'
 
 # ---- selection and orders ----
 mutant bug "buildings are selected along with units" src/update-select.sh \
-    's/selected = !\${v}any_unit$/selected = true/'
+    's/selected = !\${v}any_unit && /selected = /'
 mutant bug "a press on the HUD starts a drag" src/update-select.sh \
     's/if \${v}mouse_y < screen_height() - HUD_H {/if true {/'
 mutant bug "the other player's units can be selected" src/update-select.sh \
-    's/selected = \${v}unit\.owner == \${!me}$/selected = true/'
+    's/unit\.selected = \${v}unit\.owner == \${!me} && /unit.selected = /'
+mutant bug "a drag only selects units it encloses" src/update-select.sh \
+    's/\${v}box\.overlaps(&\${v}rect)/${v}box.contains(${v}rect.point()) \&\& ${v}box.contains(${v}rect.point() + ${v}rect.size())/'
+mutant bug "a drag selects a building by its footprint, not its picture" src/update-select.sh \
+    's/\${v}box\.overlaps(&\${v}picture)/${v}box.overlaps(\&Rect::new(${v}building.pos.x + ${v}building.hitbox.x, ${v}building.pos.y + ${v}building.hitbox.y, ${v}building.hitbox.w, ${v}building.hitbox.h))/'
+mutant bug "a click acts like a drag" src/update-select.sh \
+    's/let \${v}click = .*;/let ${v}click = false;/'
+mutant bug "a drag acts like a click" src/update-select.sh \
+    's/let \${v}click = .*;/let ${v}click = true;/'
+mutant bug "a click picks the last unit, not the one in front" src/update-select.sh \
+    's/ && \${v}unit\.pos\.y >= \${v}front//'
+mutant bug "a click on the hall's roof misses it" src/update-select.sh \
+    's/\${v}picture\.contains(\${v}point)/${v}picture.contains(${v}point) \&\& ${v}point.y >= ${v}building.pos.y + HALL_HITBOX.y/'
+mutant bug "a click can pick the other player's unit" src/update-select.sh \
+    's/if \${v}unit\.owner == \${!me} && \${v}rect\.contains/if ${v}rect.contains/'
 mutant bug "the drag is in screen space, not world space" src/update-select.sh \
     's/\(\.min(\${v}end_[xy])\) + \${!view}\.[xy],/\1,/'
+mutant bug "a right-click on the minimap orders nothing" src/update-orders.sh \
+    's/(\${v}on_map || \${v}on_minimap)/${v}on_map/'
+mutant bug "a right-click on the minimap orders in screen space" src/update-orders.sh \
+    's/(\${v}mouse - \${!minimap}\.point()) \* (WORLD_W \/ \${!minimap}\.w)/${v}mouse + ${!view}/'
+mutant bug "a right-click on the minimap ignores its scale" src/update-orders.sh \
+    's/ \* (WORLD_W \/ \${!minimap}\.w)//'
+mutant bug "a left click on the minimap doesn't move the view" src/update-minimap-view.sh \
+    's/\${!view} = (/let _ = (/'
+mutant bug "a left click on the minimap doesn't center the view" src/update-minimap-view.sh \
+    's/(\${v}point - \${v}area \/ 2\.0)/(${v}point)/'
+mutant bug "a box drag over the minimap moves the view" src/update-minimap-view.sh \
+    's/ && \${!drag_start}\.is_none()//'
+mutant bug "the view snaps back to walking units off screen" src/update-scroll.sh \
+    's/ && \${v}visible {/ {/'
 mutant bug "right-click orders no units" src/update-orders.sh \
     's/units: \${v}ids,/units: vec![],/'
 
@@ -110,10 +147,32 @@ mutant bug "units overshoot instead of stopping at their target" src/update-unit
     '/\${v}unit\.pos = \${v}unit\.target;/d'
 mutant bug "the view doesn't scroll right" src/update-scroll.sh \
     '/\${!view}\.x = \${v}unit\.pos\.x - (\${v}map_w - SCROLL_MARGIN);/d'
+mutant bug "spawn spots aren't shuffled" src/world-reset.sh \
+    '/\${v}spots\.swap(/d'
+mutant bug "both players start at the same spawn spot" src/world-reset.sh \
+    's/spawns\[\${v}spots\[\${v}owner\]\]/spawns[${v}spots[0]]/'
 mutant bug "the spawn ignores the seed" src/world-reset.sh \
     's/let mut \${v}rng: u64 = \${!seed} as u64;/let mut ${v}rng: u64 = 0;/'
 mutant bug "the checksum ignores positions" src/world-checksum.sh \
     '/\${v}unit\.\(pos\|target\)\.[xy]\.to_bits(),/d'
+
+# ---- objectives ----
+mutant bug "a player's own hall counts as the rival's" src/update-objectives.sh \
+    's/building\.owner != \${v}player/building.owner == ${v}player/'
+mutant bug "sight range is ignored" src/update-objectives.sh \
+    's/<= SIGHT_RANGE/<= 1e9/'
+mutant bug "the other player's units find the hall" src/update-objectives.sh \
+    's/unit\.owner == \${v}player \&\& {/true \&\& {/'
+mutant bug "offline has no rival hall" src/world-reset.sh \
+    's/let \${v}playing = .*;/let ${v}playing = true;/'
+mutant bug "the checksum ignores objectives" src/world-checksum.sh \
+    '/\${!world}\.objectives\[[01]\],/d'
+mutant bug "the check mark is never drawn" src/draw-objectives.sh \
+    's/if \${v}done {/if false {/'
+mutant bug "the map name isn't drawn" src/draw-objectives.sh \
+    '/draw_text(\${!map_name}/d'
+mutant bug "a done objective isn't greyed" src/draw-objectives.sh \
+    's/if \${v}done { GRAY } else { WHITE }/WHITE/'
 
 # ---- drawing ----
 mutant bug "selection rects ignore the view" src/draw-world.sh \

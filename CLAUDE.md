@@ -29,8 +29,8 @@ cargo run
 
 Multiplayer runs both players' sims on each machine (see README "Multiplayer"), so they must stay identical.
 
-- Input snippets only push `Command`s to `world.outbox`. `apply-commands.sh` is the only place that changes units, buildings, gold or `next_id`. Offline, `main.sh` loops the outbox straight back as the current turn's commands.
-- Sim snippets (`apply-commands.sh`, `update-units.sh`, `world-reset.sh`) run in fixed `TICK_SECS` steps and may only depend on commands and sim state: no frame time, mouse, screen size (except `world-reset.sh`'s starting view), clock or `HashMap` order.
+- Input snippets only push `Command`s to `world.outbox`. `apply-commands.sh` is the only place that changes units, buildings, gold or `next_id`. `update-objectives.sh` is the only place that sets `world.objectives`, each player's completed `OBJ_` bits. Offline, `main.sh` loops the outbox straight back as the current turn's commands.
+- Sim snippets (`apply-commands.sh`, `update-units.sh`, `update-objectives.sh`, `world-reset.sh`) run in fixed `TICK_SECS` steps and may only depend on commands and sim state: no frame time, mouse, screen size (except `world-reset.sh`'s starting view), clock or `HashMap` order.
 - Selection, placing, the drag and the view are local and never go through commands.
 - `tests/lockstep.test.sh` checks determinism and the command rules.
 

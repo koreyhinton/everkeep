@@ -5,14 +5,17 @@ v=${1:-mn_}
 export ${v}res_Resources=resources
 
 export ${v}reset_World=world
+export ${v}reset_Map=DEFAULT_MAP
 export ${v}reset_Players=1
 export ${v}reset_Seed=miniquad::date::now\(\).to_bits\(\)
 export ${v}mpreset_World=world
+export ${v}mpreset_Map=DEFAULT_MAP
 export ${v}mpreset_Players=2
 export ${v}mpreset_Seed=seed
 
 export ${v}layout_BuildButton=build_button
 export ${v}layout_TrainButton=train_button
+export ${v}layout_Minimap=minimap
 export ${v}hud_Buildings=world.buildings
 export ${v}hud_Gold=world.gold[world.me]
 export ${v}hud_Placing=world.placing
@@ -32,6 +35,10 @@ export ${v}orders_Units=world.units
 export ${v}orders_View=world.view
 export ${v}orders_Outbox=world.outbox
 export ${v}orders_Me=world.me
+export ${v}orders_Minimap=minimap
+export ${v}mmview_Minimap=minimap
+export ${v}mmview_View=world.view
+export ${v}mmview_DragStart=world.drag_start
 
 export ${v}apply_Commands=turn_cmds[player]
 export ${v}apply_Player=player
@@ -41,6 +48,9 @@ export ${v}apply_Gold=world.gold
 export ${v}apply_NextId=world.next_id
 export ${v}units_Units=world.units
 export ${v}units_DeltaT=TICK_SECS
+export ${v}obj_Units=world.units
+export ${v}obj_Buildings=world.buildings
+export ${v}obj_Objectives=world.objectives
 export ${v}scroll_Units=world.units
 export ${v}scroll_View=world.view
 export ${v}scroll_Me=world.me
@@ -88,6 +98,7 @@ export ${v}dragbox_DragStart=world.drag_start
 export ${v}minimap_Units=world.units
 export ${v}minimap_Buildings=world.buildings
 export ${v}minimap_View=world.view
+export ${v}minimap_Minimap=minimap
 export ${v}drawhud_Units=world.units
 export ${v}drawhud_Buildings=world.buildings
 export ${v}drawhud_Gold=world.gold[world.me]
@@ -95,6 +106,8 @@ export ${v}drawhud_Placing=world.placing
 export ${v}drawhud_Me=world.me
 export ${v}drawhud_BuildButton=build_button
 export ${v}drawhud_TrainButton=train_button
+export ${v}quests_Objectives=world.objectives[world.me]
+export ${v}quests_MapName=DEFAULT_MAP.name
 
 export ${v}uipress_Ui=ui
 export ${v}uipress_GameState=game_state
@@ -166,6 +179,7 @@ cat << EOF
             view: Vec2::ZERO,
             next_id: 0,
             outbox: vec![],
+            objectives: [0; 2],
         };
 
         // lockstep: offline games run the same turns, confirmed locally
@@ -289,9 +303,14 @@ cat << EOF
                     }
                     // input only queues orders in world.outbox; the sim applies them on a turn
                     ` ./update-hud.sh ${v}hud_ `
+                    // the click that places a hall doesn't select (selection
+                    // runs first, while not placing; placing ends on the press)
+                    if world.placing.is_none() {
+                        ` ./update-select.sh ${v}select_ `
+                    }
                     ` ./update-placement.sh ${v}place_ `
-                    ` ./update-select.sh ${v}select_ `
                     ` ./update-orders.sh ${v}orders_ `
+                    ` ./update-minimap-view.sh ${v}mmview_ `
                 }
                 GameState::Paused => {
                     if is_key_pressed(KeyCode::Space) {
@@ -395,6 +414,7 @@ cat << EOF
                     }
                     if !stalled {
                         ` ./update-units.sh ${v}units_ `
+                        ` ./update-objectives.sh ${v}obj_ `
                         tick += 1;
                         acc -= TICK_SECS;
                     }
@@ -457,6 +477,7 @@ cat << EOF
                     ` ./draw-drag-box.sh ${v}dragbox_ `
                     ` ./draw-hud.sh ${v}drawhud_ `
                     ` ./draw-minimap.sh ${v}minimap_ `
+                    ` ./draw-objectives.sh ${v}quests_ `
                     if online {
                         ` ./world-checksum.sh ${v}sum_ `
                         ` ./draw-net-status.sh ${v}status_ `

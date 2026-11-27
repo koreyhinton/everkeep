@@ -502,6 +502,14 @@ cat << EOF
                 }
             }
 
+            // Local: this player's fog of war, from where everything is after
+            // the sim (and while paused online, as the sim goes on). The draw
+            // below reads light: draw-world, draw-fog and draw-minimap.
+            let mut light: Vec<f32> = vec![];
+            if matches!(game_state, GameState::Playing | GameState::Paused) {
+                ` ./update-fog.sh ${v}fog_ `
+            }
+
             // Draw
             clear_background(BLACK);
             match game_state {
@@ -523,7 +531,6 @@ cat << EOF
                 }
                 GameState::Playing | GameState::Paused => {
                     ` ./draw-ground.sh ${v}ground_ `
-                    ` ./update-fog.sh ${v}fog_ `
                     ` ./draw-world.sh ${v}world_ `
                     ` ./draw-fog.sh ${v}fogdraw_ `
                     ` ./draw-placement.sh ${v}ghost_ `

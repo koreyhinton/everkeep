@@ -58,7 +58,7 @@
 #                        rest.
 #   draw-placement.sh    Placing HallTexture: the ghost, drawn with a color
 #                        alpha below 1.
-#   update-fog.sh        Units Buildings Me Explored -> Light: this player's
+#   update-fog.sh        Units Buildings Me Explored Light (refilled): this player's
 #                        sight, and the ground they've explored; rival
 #                        buildings become seen.
 #   draw-fog.sh          Light Explored View FogImage FogTexture: the fog's
@@ -456,8 +456,11 @@ fn frame(world: &mut World, input: Mouse) -> Vec<Draw> {
     ` ./update-units.sh ${v}units_ `
     ` ./update-scroll.sh ${v}scroll_ `
 
-    // Draw
+    // as main.sh: this player's fog, after the sim, before the draw
+    let mut light: Vec<f32> = vec![];
     ` ./update-fog.sh ${v}fog_ `
+
+    // Draw
     PHASE.with(|phase| *phase.borrow_mut() = "world");
     ` ./draw-world.sh ${v}world_ `
     PHASE.with(|phase| *phase.borrow_mut() = "fog");

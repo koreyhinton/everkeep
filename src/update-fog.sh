@@ -10,11 +10,13 @@ cat << EOF
     // Each of this player's units (from its feet) and buildings (from its
     // footprint) lights the fog cells around it: fully within SIGHT_RANGE,
     // less FOG_FADE / 2, fading to none at SIGHT_RANGE + FOG_FADE / 2. Light
-    // (declared here) holds each cell's light, 0 to 1. A lit cell becomes
+    // (a Vec<f32>, declared by the caller) is refilled with each cell's
+    // light, 0 to 1. A lit cell becomes
     // Explored for good. A rival building in sight (within SIGHT_RANGE of a
     // unit or building, as update-objectives.sh measures it) becomes seen,
     // and stays drawn from then on.
-    let mut ${!light}: Vec<f32> = vec![0.0; FOG_W * FOG_H];
+    ${!light}.clear();
+    ${!light}.resize(FOG_W * FOG_H, 0.0);
     let mut ${v}eyes: Vec<Rect> = vec![];
     for ${v}unit in ${!units}.iter() {
         if ${v}unit.owner == ${!me} {

@@ -10,6 +10,25 @@ cat << 'EOF'
     const WORLD_W: f32 = 3200.0;
     const WORLD_H: f32 = 2400.0;
 
+    // A map: where players' bases can start. world-reset.sh shuffles the
+    // spawn spots with the game's seed and gives player n the n-th one.
+    struct Map {
+        name: &'static str, // shown above the objectives
+        spawns: &'static [Vec2],
+    }
+
+    // the default map: one spawn spot near each corner of the world, inset
+    // so a hall and its spread fit inside
+    const DEFAULT_MAP: Map = Map {
+        name: "Winter's Edge",
+        spawns: &[
+            Vec2::new(500.0, 400.0),                     // top-left
+            Vec2::new(WORLD_W - 500.0, 400.0),           // top-right
+            Vec2::new(500.0, WORLD_H - 300.0),           // bottom-left
+            Vec2::new(WORLD_W - 500.0, WORLD_H - 300.0), // bottom-right
+        ],
+    };
+
     // the unit's body, relative to its feet
     const UNIT_HITBOX: Rect = Rect::new(-24.0, -64.0, 48.0, 64.0);
     const UNIT_SPEED: f32 = 200.0;
@@ -31,6 +50,14 @@ cat << 'EOF'
     const HUD_H: f32 = 120.0;
     // the view scrolls to keep a walking unit this far inside its edges
     const SCROLL_MARGIN: f32 = 120.0;
+
+    // a unit sees this far from its feet
+    const SIGHT_RANGE: f32 = 300.0;
+
+    // objectives: each one is a bit in World::objectives
+    const OBJ_FIND_RIVAL_HALL: u32 = 1 << 0;
+    // every objective, in the order the quest bubble lists them
+    const OBJECTIVES: [(u32, &str); 1] = [(OBJ_FIND_RIVAL_HALL, "Find the rival's main hall")];
 
     // lockstep: 60 sim ticks a second, 6 ticks (100 ms) a turn, and orders run
     // INPUT_DELAY turns after they're given
@@ -66,7 +93,7 @@ cat << 'EOF'
         selected: bool,
     }
 
-    // Everything the sim changes (units, buildings, gold, next_id) changes
+    // Everything the sim changes (units, buildings, gold, next_id, objectives) changes
     // only through apply-commands.sh, the same way on every player's machine.
     // The rest is this player's own: selection, placing, the drag and the view.
     struct World {
@@ -79,6 +106,7 @@ cat << 'EOF'
         view: Vec2,               // world position of the screen's top-left
         next_id: u32,             // the id of the next unit or building
         outbox: Vec<Command>,     // this player's orders, not yet applied
+        objectives: [u32; 2],     // per player: the OBJ_ bits they've completed
     }
 
     // An order. On the wire: {"op":"move","units":[0,1],"x":740,"y":300}.

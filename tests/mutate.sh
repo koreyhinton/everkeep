@@ -46,7 +46,8 @@ mutant() { MT_KINDS+=("$1"); MT_NAMES+=("$2"); MT_FILES+=("$3"); MT_SEDS+=("$4")
 # ---- not implemented: each snippet the integration tests inline ----
 for snippet in hud-layout update-hud update-placement update-select update-orders \
     apply-commands update-units update-scroll draw-world draw-placement draw-minimap \
-    draw-hud update-unit-frame world-reset world-checksum net-recv net-turn-msg; do
+    draw-hud update-unit-frame world-reset world-checksum net-recv net-turn-msg \
+    update-objectives draw-objectives; do
     mutant missing "${snippet}.sh not written" "src/${snippet}.sh" '/^cat << EOF$/,/^EOF$/d'
 done
 mutant missing "orc websockets not wired in" "orc-env.sh build-web.sh src/main.sh" '/ORC_WS/d'
@@ -110,10 +111,32 @@ mutant bug "units overshoot instead of stopping at their target" src/update-unit
     '/\${v}unit\.pos = \${v}unit\.target;/d'
 mutant bug "the view doesn't scroll right" src/update-scroll.sh \
     '/\${!view}\.x = \${v}unit\.pos\.x - (\${v}map_w - SCROLL_MARGIN);/d'
+mutant bug "spawn spots aren't shuffled" src/world-reset.sh \
+    '/\${v}spots\.swap(/d'
+mutant bug "both players start at the same spawn spot" src/world-reset.sh \
+    's/spawns\[\${v}spots\[\${v}owner\]\]/spawns[${v}spots[0]]/'
 mutant bug "the spawn ignores the seed" src/world-reset.sh \
     's/let mut \${v}rng: u64 = \${!seed} as u64;/let mut ${v}rng: u64 = 0;/'
 mutant bug "the checksum ignores positions" src/world-checksum.sh \
     '/\${v}unit\.\(pos\|target\)\.[xy]\.to_bits(),/d'
+
+# ---- objectives ----
+mutant bug "a player's own hall counts as the rival's" src/update-objectives.sh \
+    's/building\.owner != \${v}player/building.owner == ${v}player/'
+mutant bug "sight range is ignored" src/update-objectives.sh \
+    's/<= SIGHT_RANGE/<= 1e9/'
+mutant bug "the other player's units find the hall" src/update-objectives.sh \
+    's/unit\.owner == \${v}player \&\& {/true \&\& {/'
+mutant bug "offline has no rival hall" src/world-reset.sh \
+    's/let \${v}playing = .*;/let ${v}playing = true;/'
+mutant bug "the checksum ignores objectives" src/world-checksum.sh \
+    '/\${!world}\.objectives\[[01]\],/d'
+mutant bug "the check mark is never drawn" src/draw-objectives.sh \
+    's/if \${v}done {/if false {/'
+mutant bug "the map name isn't drawn" src/draw-objectives.sh \
+    '/draw_text(\${!map_name}/d'
+mutant bug "a done objective isn't greyed" src/draw-objectives.sh \
+    's/if \${v}done { GRAY } else { WHITE }/WHITE/'
 
 # ---- drawing ----
 mutant bug "selection rects ignore the view" src/draw-world.sh \

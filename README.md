@@ -14,10 +14,11 @@ Art: the game art isn't included in this repo because its license doesn't allow 
 
 A starter RTS. Press Space (or Play) to start, and Escape to pause.
 
-- You start with one pawn and 500 gold, shown in the HUD along the bottom.
+- You start with one pawn and 500 gold, shown in the HUD along the bottom. The map has a spawn spot near each corner, and each game shuffles which players (or the offline rival) start at which.
 - **Build Main Hall** (bottom-right, 200 gold): a see-through hall follows the mouse. Left-click to place it, or right-click to cancel.
 - Drag a box around your hall to select it, then **Train Pawn** (50 gold) to add a pawn next to it.
 - Drag a box around units to select them (units win over buildings), and right-click to move them. The view scrolls to follow them across the world, and the minimap in the HUD's bottom-left shows the whole world and where you're looking.
+- **Objectives** are listed in the bubble in the top-right, under the map's name (the default map is Winter's Edge). The first is to find the rival's main hall: walk a unit near it and it's checked off, for you only. Offline there's no rival player, so an idle red hall stands at the rival's starting spot instead.
 
 ## Multiplayer
 

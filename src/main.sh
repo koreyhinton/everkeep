@@ -5,9 +5,11 @@ v=${1:-mn_}
 export ${v}res_Resources=resources
 
 export ${v}reset_World=world
+export ${v}reset_Map=DEFAULT_MAP
 export ${v}reset_Players=1
 export ${v}reset_Seed=miniquad::date::now\(\).to_bits\(\)
 export ${v}mpreset_World=world
+export ${v}mpreset_Map=DEFAULT_MAP
 export ${v}mpreset_Players=2
 export ${v}mpreset_Seed=seed
 
@@ -41,6 +43,9 @@ export ${v}apply_Gold=world.gold
 export ${v}apply_NextId=world.next_id
 export ${v}units_Units=world.units
 export ${v}units_DeltaT=TICK_SECS
+export ${v}obj_Units=world.units
+export ${v}obj_Buildings=world.buildings
+export ${v}obj_Objectives=world.objectives
 export ${v}scroll_Units=world.units
 export ${v}scroll_View=world.view
 export ${v}scroll_Me=world.me
@@ -95,6 +100,8 @@ export ${v}drawhud_Placing=world.placing
 export ${v}drawhud_Me=world.me
 export ${v}drawhud_BuildButton=build_button
 export ${v}drawhud_TrainButton=train_button
+export ${v}quests_Objectives=world.objectives[world.me]
+export ${v}quests_MapName=DEFAULT_MAP.name
 
 export ${v}uipress_Ui=ui
 export ${v}uipress_GameState=game_state
@@ -166,6 +173,7 @@ cat << EOF
             view: Vec2::ZERO,
             next_id: 0,
             outbox: vec![],
+            objectives: [0; 2],
         };
 
         // lockstep: offline games run the same turns, confirmed locally
@@ -395,6 +403,7 @@ cat << EOF
                     }
                     if !stalled {
                         ` ./update-units.sh ${v}units_ `
+                        ` ./update-objectives.sh ${v}obj_ `
                         tick += 1;
                         acc -= TICK_SECS;
                     }
@@ -457,6 +466,7 @@ cat << EOF
                     ` ./draw-drag-box.sh ${v}dragbox_ `
                     ` ./draw-hud.sh ${v}drawhud_ `
                     ` ./draw-minimap.sh ${v}minimap_ `
+                    ` ./draw-objectives.sh ${v}quests_ `
                     if online {
                         ` ./world-checksum.sh ${v}sum_ `
                         ` ./draw-net-status.sh ${v}status_ `

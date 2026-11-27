@@ -7,7 +7,7 @@
 # only if the sim is deterministic: the same seed and the same commands on
 # the same turns must give the same world on every machine. These tests run
 # the game's sim steps (world-reset, apply-commands, update-units,
-# world-checksum) the way main.sh's tick loop does, and check the rules that
+# update-objectives, world-checksum) the way main.sh's tick loop does, and check the rules that
 # keep a command from the network from cheating or crashing the sim. They
 # also check the messages exchanged with sharecmd's lockstep server
 # (net-turn-msg.sh out, net-recv.sh in).
@@ -19,6 +19,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../src" || exit 1
 v=mn_
 # maps
 export ${v}reset_World=world
+export ${v}reset_Map=DEFAULT_MAP
 export ${v}reset_Players=players
 export ${v}reset_Seed=seed
 export ${v}apply_Commands=turn_cmds[player]
@@ -29,6 +30,9 @@ export ${v}apply_Gold=world.gold
 export ${v}apply_NextId=world.next_id
 export ${v}units_Units=world.units
 export ${v}units_DeltaT=TICK_SECS
+export ${v}obj_Units=world.units
+export ${v}obj_Buildings=world.buildings
+export ${v}obj_Objectives=world.objectives
 export ${v}sum_World=world
 export ${v}sum_Checksum=checksum
 export ${v}msg_Commands=commands
@@ -74,13 +78,15 @@ fn new_world(players: u32, seed: u64) -> World {
         view: Vec2::ZERO,
         next_id: 0,
         outbox: vec![],
+        objectives: [0; 2],
     };
     ` ./world-reset.sh ${v}reset_ `
     world
 }
 
 // main.sh's tick loop, with every turn's commands already confirmed:
-// apply both players' commands at each turn, then step the units each tick
+// apply both players' commands at each turn, then step the units and check
+// the objectives each tick
 fn run_turns(world: &mut World, mut confirmed: BTreeMap<u32, [Vec<Command>; 2]>, turns: u32) {
     for tick in 0..turns * TICKS_PER_TURN {
         if tick % TICKS_PER_TURN == 0 {
@@ -90,6 +96,7 @@ fn run_turns(world: &mut World, mut confirmed: BTreeMap<u32, [Vec<Command>; 2]>,
             }
         }
         ` ./update-units.sh ${v}units_ `
+        ` ./update-objectives.sh ${v}obj_ `
     }
 }
 
@@ -174,14 +181,15 @@ fn nothing_is_built_or_trained_without_the_gold() {
         Command::PlaceHall { x: 1400, y: 800 },
         Command::PlaceHall { x: 2000, y: 800 },
     ], vec![]]);
-    // 100 gold left: two pawns, then none
+    // 100 gold left: two pawns, then none (ids: 0 is the pawn, 1 the idle
+    // rival hall, 2 and 3 the new halls)
     confirmed.insert(1, [vec![
-        Command::TrainPawn { hall: 1 },
-        Command::TrainPawn { hall: 1 },
-        Command::TrainPawn { hall: 1 },
+        Command::TrainPawn { hall: 2 },
+        Command::TrainPawn { hall: 2 },
+        Command::TrainPawn { hall: 2 },
     ], vec![]]);
     run_turns(&mut world, confirmed, 3);
-    assert_eq!(world.buildings.len(), 2);
+    assert_eq!(world.buildings.iter().filter(|building| building.owner == 0).count(), 2);
     assert_eq!(world.units.len(), 3);
     assert_eq!(world.gold[0], 0);
 }
@@ -195,7 +203,7 @@ fn halls_cant_overlap() {
         Command::PlaceHall { x: 850, y: 820 },
     ], vec![]]);
     run_turns(&mut world, confirmed, 1);
-    assert_eq!(world.buildings.len(), 1);
+    assert_eq!(world.buildings.iter().filter(|building| building.owner == 0).count(), 1);
     assert_eq!(world.gold[0], START_GOLD - HALL_COST);
 }
 
@@ -210,8 +218,177 @@ fn extreme_values_are_clamped_to_the_world() {
     run_turns(&mut world, confirmed, 1);
     let unit = &world.units[0];
     assert!((0.0..=WORLD_W).contains(&unit.target.x) && (0.0..=WORLD_H).contains(&unit.target.y));
-    let hall = &world.buildings[0];
+    let hall = world.buildings.iter().find(|building| building.owner == 0).unwrap();
     assert!((0.0..=WORLD_W).contains(&hall.pos.x) && (0.0..=WORLD_H).contains(&hall.pos.y));
+}
+
+// the world position of a building's hitbox
+fn footprint(building: &Building) -> Rect {
+    Rect::new(
+        building.pos.x + building.hitbox.x,
+        building.pos.y + building.hitbox.y,
+        building.hitbox.w,
+        building.hitbox.h,
+    )
+}
+
+// the spawn spot a position was spread from (up to 100 px each way)
+fn spot_of(pos: Vec2) -> usize {
+    DEFAULT_MAP
+        .spawns
+        .iter()
+        .position(|spot| (pos.x - spot.x).abs() <= 100.0 && (pos.y - spot.y).abs() <= 100.0)
+        .unwrap_or_else(|| panic!("{pos:?} isn't near any spawn spot"))
+}
+
+#[test]
+fn offline_has_an_idle_rival_hall() {
+    for seed in 0..16 {
+        let world = new_world(1, seed);
+        assert_eq!(world.buildings.len(), 1, "offline should start with one rival hall");
+        let hall = &world.buildings[0];
+        assert_eq!(hall.owner, 1);
+        assert_eq!(hall.kind, BuildingKind::MainHall);
+        assert_ne!(spot_of(hall.pos), spot_of(world.units[0].pos), "the rival hall shares the player's spot");
+        let rect = footprint(hall);
+        assert!(rect.x >= 0.0 && rect.y >= 0.0 && rect.right() <= WORLD_W && rect.bottom() <= WORLD_H);
+        assert_eq!(hall.pos, hall.pos.round(), "the rival hall should sit on whole pixels");
+        assert_eq!(world.objectives, [0, 0]);
+    }
+}
+
+#[test]
+fn players_start_at_different_spawn_spots() {
+    for seed in 0..32 {
+        let world = new_world(2, seed);
+        let spots: Vec<usize> = world.units.iter().map(|unit| spot_of(unit.pos)).collect();
+        assert_eq!(spots.len(), 2);
+        assert_ne!(spots[0], spots[1], "seed {seed}: both players start at the same spot");
+    }
+}
+
+#[test]
+fn every_spawn_spot_gets_used() {
+    let mut used = [[false; 4]; 2];
+    for seed in 0..64 {
+        let world = new_world(2, seed);
+        for unit in world.units.iter() {
+            used[unit.owner][spot_of(unit.pos)] = true;
+        }
+        let offline = new_world(1, seed);
+        used[1][spot_of(offline.buildings[0].pos)] = true;
+    }
+    assert_eq!(used, [[true; 4]; 2], "some player never starts at some spot");
+}
+
+#[test]
+fn the_same_seed_picks_the_same_spots() {
+    for seed in [3, 9, 27] {
+        let a = new_world(2, seed);
+        let b = new_world(2, seed);
+        let spots = |world: &World| world.units.iter().map(|unit| unit.pos).collect::<Vec<Vec2>>();
+        assert_eq!(spots(&a), spots(&b));
+    }
+}
+
+#[test]
+fn online_starts_without_halls() {
+    assert!(new_world(2, 7).buildings.is_empty());
+}
+
+#[test]
+fn walking_to_the_rival_hall_completes_the_objective() {
+    let mut world = new_world(1, 7);
+    let hall = world.buildings[0].pos;
+    let mut confirmed = BTreeMap::new();
+    confirmed.insert(0, [vec![Command::Move { units: vec![0], x: hall.x as i32, y: hall.y as i32 + 100 }], vec![]]);
+    // a few turns in, the pawn is still on its way
+    run_turns(&mut world, confirmed, 5);
+    assert_eq!(world.objectives[0] & OBJ_FIND_RIVAL_HALL, 0, "found the hall before getting near it");
+    run_turns(&mut world, BTreeMap::new(), 150);
+    assert_eq!(world.units[0].pos, world.units[0].target, "the pawn didn't arrive");
+    assert_ne!(world.objectives[0] & OBJ_FIND_RIVAL_HALL, 0, "walking to the rival hall didn't find it");
+    assert_eq!(world.objectives[1], 0, "the rival found its own hall");
+}
+
+#[test]
+fn far_away_doesnt_complete() {
+    let mut world = new_world(1, 7);
+    run_turns(&mut world, BTreeMap::new(), 20);
+    assert_eq!(world.objectives, [0, 0]);
+}
+
+// a Move that puts a lone unit at x (its group grid puts the first unit
+// MOVE_SPACING left of the point)
+fn move_to(x: f32, y: f32) -> BTreeMap<u32, [Vec<Command>; 2]> {
+    let mut confirmed = BTreeMap::new();
+    confirmed.insert(0, [vec![Command::Move { units: vec![0], x: (x + MOVE_SPACING).round() as i32, y: y.round() as i32 }], vec![]]);
+    confirmed
+}
+
+#[test]
+fn the_objective_needs_a_unit_within_sight_range() {
+    // every seed's rival corner: walk out level with the hall, on the side
+    // facing the middle of the world, then sideways toward it
+    for seed in 0..16 {
+        let mut world = new_world(1, seed);
+        let rect = footprint(&world.buildings[0]);
+        let side = if rect.center().x < WORLD_W / 2.0 { 1.0 } else { -1.0 };
+        let edge = if side > 0.0 { rect.right() } else { rect.x };
+        let y = rect.bottom();
+        run_turns(&mut world, move_to(edge + side * 900.0, y), 200);
+        assert_eq!(world.units[0].pos, world.units[0].target, "seed {seed}: the pawn didn't arrive");
+        run_turns(&mut world, move_to(edge + side * (SIGHT_RANGE + 20.0), y), 60);
+        assert_eq!(world.units[0].pos, world.units[0].target, "seed {seed}: the pawn didn't arrive");
+        assert_eq!(world.objectives[0], 0, "seed {seed}: found the hall from outside sight range");
+        // then step inside it
+        run_turns(&mut world, move_to(edge + side * (SIGHT_RANGE - 20.0), y), 20);
+        assert_ne!(
+            world.objectives[0] & OBJ_FIND_RIVAL_HALL,
+            0,
+            "seed {seed}: didn't find the hall from inside sight range"
+        );
+    }
+}
+
+#[test]
+fn own_hall_doesnt_count() {
+    let mut world = new_world(2, 7);
+    let p0 = world.units.iter().find(|unit| unit.owner == 0).unwrap().pos;
+    let mut confirmed = BTreeMap::new();
+    // player 0 builds right next to their own pawn
+    confirmed.insert(0, [vec![Command::PlaceHall { x: p0.x as i32 + 200, y: p0.y as i32 }], vec![]]);
+    run_turns(&mut world, confirmed, 10);
+    assert_eq!(world.buildings.len(), 1);
+    assert_eq!(world.objectives, [0, 0], "a player found their own hall");
+}
+
+#[test]
+fn the_objective_is_lockstep() {
+    let mut a = new_world(2, 42);
+    let mut b = new_world(2, 42);
+    let p0 = a.units.iter().find(|unit| unit.owner == 0).unwrap().pos;
+    let hall = (p0.x as i32 + 300, p0.y as i32);
+    let mut confirmed = BTreeMap::new();
+    confirmed.insert(0, [vec![Command::PlaceHall { x: hall.0, y: hall.1 }], vec![]]);
+    // player 1's pawn (id 1) walks over to player 0's hall
+    confirmed.insert(1, [vec![], vec![Command::Move { units: vec![1], x: hall.0, y: hall.1 + 100 }]]);
+    let checksum_before = checksum_of(&a);
+    run_turns(&mut a, confirmed.clone(), 200);
+    run_turns(&mut b, confirmed, 200);
+    assert_eq!(a.objectives, [0, OBJ_FIND_RIVAL_HALL], "only player 1 should have found a hall");
+    assert_eq!(a.objectives, b.objectives);
+    assert_eq!(checksum_of(&a), checksum_of(&b));
+    assert_ne!(checksum_of(&a), checksum_before);
+}
+
+#[test]
+fn the_checksum_covers_objectives() {
+    let world = new_world(2, 42);
+    let before = checksum_of(&world);
+    let mut found = new_world(2, 42);
+    found.objectives[1] = OBJ_FIND_RIVAL_HALL;
+    assert_ne!(checksum_of(&found), before, "objectives aren't in the checksum");
 }
 
 #[test]

@@ -9,7 +9,13 @@ cat << EOF
     // FNV-1a hash of the sim state (not selection or view). Every player's
     // should match on the same turn; if they differ, the game has desynced.
     let mut ${!checksum}: u32 = 0x811c9dc5;
-    let mut ${v}words: Vec<u32> = vec![${!world}.gold[0], ${!world}.gold[1], ${!world}.next_id];
+    let mut ${v}words: Vec<u32> = vec![
+        ${!world}.gold[0],
+        ${!world}.gold[1],
+        ${!world}.next_id,
+        ${!world}.objectives[0],
+        ${!world}.objectives[1],
+    ];
     for ${v}unit in ${!world}.units.iter() {
         ${v}words.extend([
             ${v}unit.id,

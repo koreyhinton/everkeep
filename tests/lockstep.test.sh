@@ -6,9 +6,11 @@
 # Online, every player runs the sim on their own machine. They stay in step
 # only if the sim is deterministic: the same seed and the same commands on
 # the same turns must give the same world on every machine. These tests run
-# the game's sim steps (world-reset, apply-commands, update-units,
-# update-objectives, world-checksum) the way main.sh's tick loop does, and check the rules that
-# keep a command from the network from cheating or crashing the sim. They
+# the game's sim steps (world-reset, apply-commands, find-path and
+# apply-path, update-units, update-objectives, world-checksum) the way
+# main.sh's tick loop does, and check the rules that keep a command from the
+# network from cheating or crashing the sim, and units out of trees and
+# halls. They
 # also check the messages exchanged with sharecmd's lockstep server
 # (net-turn-msg.sh out, net-recv.sh in).
 
@@ -28,6 +30,16 @@ export ${v}apply_Units=world.units
 export ${v}apply_Buildings=world.buildings
 export ${v}apply_Gold=world.gold
 export ${v}apply_NextId=world.next_id
+export ${v}apply_Grid=world.grid
+export ${v}path_Grid=world.grid
+export ${v}path_Start=path_start
+export ${v}path_Goal=path_goal
+export ${v}path_Path=path_cells
+export ${v}path_Found=path_found
+export ${v}applypath_Unit=world.units[unit_i]
+export ${v}applypath_Cells=path_cells
+export ${v}applypath_Found=path_found
+export ${v}applypath_Grid=world.grid
 export ${v}units_Units=world.units
 export ${v}units_DeltaT=TICK_SECS
 export ${v}obj_Units=world.units
@@ -54,8 +66,9 @@ use std::collections::BTreeMap;
 
 EOF
 
-# the game's constants and types
+# the game's constants and types, and orc pathfinding's PathGrid
 ./models.sh
+${ORC_PATHFINDING}/models.sh "${ORC_PATHFINDING_VERSION}" || exit 1
 
 cat << EOF
 
@@ -79,25 +92,53 @@ fn new_world(players: u32, seed: u64) -> World {
         next_id: 0,
         outbox: vec![],
         objectives: [0; 2],
+        grid: PathGrid { w: 0, h: 0, blocked: vec![] },
     };
     ` ./world-reset.sh ${v}reset_ `
     world
 }
 
 // main.sh's tick loop, with every turn's commands already confirmed:
-// apply both players' commands at each turn, then step the units and check
-// the objectives each tick
-fn run_turns(world: &mut World, mut confirmed: BTreeMap<u32, [Vec<Command>; 2]>, turns: u32) {
+// apply both players' commands at each turn and find the paths they need,
+// then step the units and check the objectives each tick
+fn run_turns(world: &mut World, confirmed: BTreeMap<u32, [Vec<Command>; 2]>, turns: u32) {
+    run_turns_watching(world, confirmed, turns, |_| {});
+}
+
+// run_turns, calling watch after every tick
+fn run_turns_watching(
+    world: &mut World,
+    mut confirmed: BTreeMap<u32, [Vec<Command>; 2]>,
+    turns: u32,
+    mut watch: impl FnMut(&World),
+) {
     for tick in 0..turns * TICKS_PER_TURN {
         if tick % TICKS_PER_TURN == 0 {
             let turn_cmds = confirmed.remove(&(tick / TICKS_PER_TURN)).unwrap_or_default();
             for player in 0..2usize {
                 ` ./apply-commands.sh ${v}apply_ `
             }
+            for unit_i in 0..world.units.len() {
+                if world.units[unit_i].repath {
+                    let unit_pos = world.units[unit_i].pos;
+                    let unit_target = world.units[unit_i].target;
+                    let path_start = ((unit_pos.x / CELL) as usize, (unit_pos.y / CELL) as usize);
+                    let path_goal = ((unit_target.x / CELL) as usize, (unit_target.y / CELL) as usize);
+                    ` ${ORC_PATHFINDING}/snippets/find-path.sh ${v}path_ `
+                    ` ./apply-path.sh ${v}applypath_ `
+                }
+            }
         }
         ` ./update-units.sh ${v}units_ `
         ` ./update-objectives.sh ${v}obj_ `
+        watch(world);
     }
+}
+
+// x moved this far toward the middle of the world, so a hall placed there
+// isn't pushed into the trees along the edge
+fn inward(x: f32, by: f32) -> i32 {
+    (if x < WORLD_W / 2.0 { x + by } else { x - by }) as i32
 }
 
 fn checksum_of(world: &World) -> u32 {
@@ -111,8 +152,8 @@ fn a_match(world: &World) -> BTreeMap<u32, [Vec<Command>; 2]> {
     let p1 = world.units.iter().find(|unit| unit.owner == 1).unwrap().pos;
     let mut confirmed = BTreeMap::new();
     confirmed.insert(1, [
-        vec![Command::PlaceHall { x: p0.x as i32 + 300, y: p0.y as i32 }],
-        vec![Command::PlaceHall { x: p1.x as i32 - 300, y: p1.y as i32 }],
+        vec![Command::PlaceHall { x: inward(p0.x, 300.0), y: p0.y as i32 }],
+        vec![Command::PlaceHall { x: inward(p1.x, 300.0), y: p1.y as i32 }],
     ]);
     // ids: 0 and 1 are the starting pawns, 2 and 3 the halls, 4 and 5 the new pawns
     confirmed.insert(3, [vec![Command::TrainPawn { hall: 2 }], vec![Command::TrainPawn { hall: 3 }]]);
@@ -218,8 +259,9 @@ fn extreme_values_are_clamped_to_the_world() {
     run_turns(&mut world, confirmed, 1);
     let unit = &world.units[0];
     assert!((0.0..=WORLD_W).contains(&unit.target.x) && (0.0..=WORLD_H).contains(&unit.target.y));
-    let hall = world.buildings.iter().find(|building| building.owner == 0).unwrap();
-    assert!((0.0..=WORLD_W).contains(&hall.pos.x) && (0.0..=WORLD_H).contains(&hall.pos.y));
+    // the corner it's clamped to is off the world's edge (and in the trees)
+    assert!(world.buildings.iter().all(|building| building.owner != 0), "a hall was built off the world's edge");
+    assert_eq!(world.gold[0], START_GOLD);
 }
 
 // the world position of a building's hitbox
@@ -357,7 +399,7 @@ fn own_hall_doesnt_count() {
     let p0 = world.units.iter().find(|unit| unit.owner == 0).unwrap().pos;
     let mut confirmed = BTreeMap::new();
     // player 0 builds right next to their own pawn
-    confirmed.insert(0, [vec![Command::PlaceHall { x: p0.x as i32 + 200, y: p0.y as i32 }], vec![]]);
+    confirmed.insert(0, [vec![Command::PlaceHall { x: inward(p0.x, 200.0), y: p0.y as i32 }], vec![]]);
     run_turns(&mut world, confirmed, 10);
     assert_eq!(world.buildings.len(), 1);
     assert_eq!(world.objectives, [0, 0], "a player found their own hall");
@@ -368,7 +410,7 @@ fn the_objective_is_lockstep() {
     let mut a = new_world(2, 42);
     let mut b = new_world(2, 42);
     let p0 = a.units.iter().find(|unit| unit.owner == 0).unwrap().pos;
-    let hall = (p0.x as i32 + 300, p0.y as i32);
+    let hall = (inward(p0.x, 300.0), p0.y as i32);
     let mut confirmed = BTreeMap::new();
     confirmed.insert(0, [vec![Command::PlaceHall { x: hall.0, y: hall.1 }], vec![]]);
     // player 1's pawn (id 1) walks over to player 0's hall
@@ -389,6 +431,175 @@ fn the_checksum_covers_objectives() {
     let mut found = new_world(2, 42);
     found.objectives[1] = OBJ_FIND_RIVAL_HALL;
     assert_ne!(checksum_of(&found), before, "objectives aren't in the checksum");
+}
+
+// ---- terrain and pathfinding ----
+
+// whether the cell under a world point is blocked (off the grid counts)
+fn blocked_at(world: &World, pos: Vec2) -> bool {
+    let (cx, cy) = ((pos.x / CELL).floor(), (pos.y / CELL).floor());
+    cx < 0.0 || cy < 0.0 || cx as usize >= world.grid.w || cy as usize >= world.grid.h
+        || world.grid.blocked[cy as usize * world.grid.w + cx as usize]
+}
+
+fn move_unit(id: u32, to: Vec2) -> BTreeMap<u32, [Vec<Command>; 2]> {
+    let mut confirmed = BTreeMap::new();
+    // a lone unit stops MOVE_SPACING left of the point (its group grid)
+    confirmed.insert(0, [vec![Command::Move { units: vec![id], x: (to.x + MOVE_SPACING) as i32, y: to.y as i32 }], vec![]]);
+    confirmed
+}
+
+#[test]
+fn the_grid_has_the_maps_trees() {
+    let world = new_world(2, 3);
+    assert_eq!((world.grid.w, world.grid.h), (GRID_W, GRID_H));
+    for (row, line) in DEFAULT_MAP.tiles.iter().enumerate() {
+        for (col, tile) in line.chars().enumerate() {
+            let center = vec2((col as f32 + 0.5) * TILE, (row as f32 + 0.5) * TILE);
+            if center.y < WORLD_H {
+                assert_eq!(blocked_at(&world, center), tile == 'T', "tile ({col}, {row}) is '{tile}'");
+            }
+        }
+    }
+}
+
+#[test]
+fn the_offline_hall_blocks_its_cells() {
+    for seed in 0..8 {
+        let world = new_world(1, seed);
+        let hall = footprint(&world.buildings[0]);
+        for (x, y) in [(hall.x + 1.0, hall.y + 1.0), (hall.center().x, hall.center().y), (hall.right() - 1.0, hall.bottom() - 1.0)] {
+            assert!(blocked_at(&world, vec2(x, y)), "seed {seed}: ({x}, {y}) under the rival hall isn't blocked");
+        }
+    }
+}
+
+#[test]
+fn a_hall_isnt_built_off_the_worlds_edge() {
+    let mut world = new_world(1, 5);
+    // no trees, so only the world's edge is in the way
+    world.grid.blocked.iter_mut().for_each(|cell| *cell = false);
+    let mut confirmed = BTreeMap::new();
+    confirmed.insert(0, [vec![Command::PlaceHall { x: 60, y: 1200 }], vec![]]);
+    run_turns(&mut world, confirmed, 1);
+    assert!(world.buildings.iter().all(|building| building.owner != 0), "a hall was built hanging off the world's edge");
+}
+
+#[test]
+fn a_pawn_sent_into_the_trees_stops_at_their_edge() {
+    for seed in 0..8 {
+        let mut world = new_world(1, seed);
+        // the world's top-left corner is deep in the trees
+        run_turns_watching(&mut world, move_unit(0, vec2(10.0, 10.0)), 200, |world| {
+            assert!(!blocked_at(world, world.units[0].pos), "seed {seed}: the pawn walked into the trees at {:?}", world.units[0].pos);
+        });
+        let unit = &world.units[0];
+        assert_eq!(unit.pos, unit.target, "seed {seed}: the pawn didn't arrive");
+        assert!(unit.pos.x < 6.0 * TILE && unit.pos.y < 6.0 * TILE, "seed {seed}: stopped at {:?}, not near the corner", unit.pos);
+    }
+}
+
+#[test]
+fn a_pawn_walks_around_a_hall_never_under_it() {
+    let mut world = new_world(1, 5);
+    // a hall in the middle, and the pawn sent from one side of it to the other
+    let mut confirmed = BTreeMap::new();
+    confirmed.insert(0, [vec![Command::PlaceHall { x: 1600, y: 1250 }], vec![]]);
+    run_turns(&mut world, confirmed, 1);
+    let hall = footprint(world.buildings.iter().find(|building| building.owner == 0).expect("the hall wasn't built"));
+    run_turns(&mut world, move_unit(0, vec2(1350.0, 1200.0)), 200);
+    assert_eq!(world.units[0].pos, vec2(1350.0, 1200.0));
+    run_turns_watching(&mut world, move_unit(0, vec2(1850.0, 1200.0)), 60, |world| {
+        assert!(!hall.contains(world.units[0].pos), "the pawn walked under the hall at {:?}", world.units[0].pos);
+    });
+    assert_eq!(world.units[0].pos, vec2(1850.0, 1200.0), "the pawn didn't get around the hall");
+}
+
+#[test]
+fn a_path_across_open_ground_is_a_straight_line() {
+    let mut world = new_world(1, 5);
+    run_turns(&mut world, move_unit(0, vec2(1600.0, 1200.0)), 200);
+    run_turns(&mut world, move_unit(0, vec2(2100.0, 1500.0)), 1);
+    assert!(world.units[0].path.is_empty(), "waypoints across open ground: {:?}", world.units[0].path);
+}
+
+#[test]
+fn a_new_hall_in_the_way_reroutes_walking_units() {
+    let mut world = new_world(1, 5);
+    run_turns(&mut world, move_unit(0, vec2(1200.0, 1200.0)), 200);
+    // the pawn sets off east, then a hall goes up in its way
+    let mut confirmed = move_unit(0, vec2(2000.0, 1200.0));
+    confirmed.insert(1, [vec![Command::PlaceHall { x: 1700, y: 1250 }], vec![]]);
+    run_turns(&mut world, confirmed, 2);
+    assert!(world.units[0].running, "the pawn should be on its way when the hall goes up");
+    let hall = footprint(world.buildings.iter().find(|building| building.owner == 0).expect("the hall wasn't built"));
+    run_turns_watching(&mut world, BTreeMap::new(), 60, |world| {
+        assert!(!hall.contains(world.units[0].pos), "the pawn walked under the new hall at {:?}", world.units[0].pos);
+    });
+    assert_eq!(world.units[0].pos, vec2(2000.0, 1200.0), "the pawn didn't get around the new hall");
+}
+
+#[test]
+fn a_hall_isnt_built_on_trees_or_on_a_unit() {
+    let mut world = new_world(1, 5);
+    let pawn = world.units[0].pos;
+    let mut confirmed = BTreeMap::new();
+    confirmed.insert(0, [vec![
+        // in the trees along the top edge
+        Command::PlaceHall { x: 1600, y: 150 },
+        // on the pawn
+        Command::PlaceHall { x: pawn.x as i32, y: pawn.y as i32 + 20 },
+    ], vec![]]);
+    run_turns(&mut world, confirmed, 1);
+    assert!(world.buildings.iter().all(|building| building.owner != 0), "a hall was built on trees or a unit");
+    assert_eq!(world.gold[0], START_GOLD);
+}
+
+#[test]
+fn a_new_pawn_never_appears_under_a_hall() {
+    let mut world = new_world(1, 5);
+    // hall 2, then hall 3 just below it, where hall 2's pawns would step out
+    let mut confirmed = BTreeMap::new();
+    confirmed.insert(0, [vec![
+        Command::PlaceHall { x: 1200, y: 1000 },
+        Command::PlaceHall { x: 1200, y: 1152 },
+    ], vec![]]);
+    confirmed.insert(1, [vec![Command::TrainPawn { hall: 2 }], vec![]]);
+    run_turns(&mut world, confirmed, 2);
+    let halls: Vec<&Building> = world.buildings.iter().filter(|building| building.owner == 0).collect();
+    assert_eq!(halls.len(), 2, "both halls should be built");
+    let pawn = world.units.last().unwrap();
+    assert_eq!(world.units.len(), 2, "the pawn wasn't trained");
+    assert!(!blocked_at(&world, pawn.pos), "the new pawn is on a blocked cell at {:?}", pawn.pos);
+    assert!(halls.iter().all(|hall| !footprint(hall).contains(pawn.pos)), "the new pawn is under a hall at {:?}", pawn.pos);
+}
+
+#[test]
+fn paths_are_the_same_on_every_machine() {
+    let mut a = new_world(2, 11);
+    let mut b = new_world(2, 11);
+    let mut confirmed = a_match(&a);
+    // and orders into the trees, and across the map
+    confirmed.insert(20, [
+        vec![Command::Move { units: vec![0], x: 5, y: 5 }],
+        vec![Command::Move { units: vec![1], x: 3190, y: 2390 }],
+    ]);
+    let mut sums = vec![];
+    run_turns_watching(&mut a, confirmed.clone(), 80, |world| sums.push(checksum_of(world)));
+    let mut i = 0;
+    run_turns_watching(&mut b, confirmed, 80, |world| {
+        assert_eq!(checksum_of(world), sums[i], "the worlds differ after tick {i}");
+        i += 1;
+    });
+}
+
+#[test]
+fn the_checksum_covers_paths() {
+    let mut world = new_world(1, 5);
+    run_turns(&mut world, move_unit(0, vec2(10.0, 10.0)), 1);
+    let before = checksum_of(&world);
+    world.units[0].path.push(vec2(1.0, 2.0));
+    assert_ne!(checksum_of(&world), before, "a unit's path isn't in the checksum");
 }
 
 #[test]

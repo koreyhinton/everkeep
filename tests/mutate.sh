@@ -47,7 +47,7 @@ mutant() { MT_KINDS+=("$1"); MT_NAMES+=("$2"); MT_FILES+=("$3"); MT_SEDS+=("$4")
 for snippet in hud-layout update-hud update-placement update-select update-orders \
     apply-commands update-units update-scroll draw-world draw-placement draw-minimap \
     draw-hud update-unit-frame world-reset world-checksum net-recv net-turn-msg \
-    update-objectives draw-objectives draw-drag-box update-minimap-view; do
+    update-objectives draw-objectives draw-drag-box update-minimap-view apply-path; do
     mutant missing "${snippet}.sh not written" "src/${snippet}.sh" '/^cat << EOF$/,/^EOF$/d'
 done
 mutant missing "orc websockets not wired in" "orc-env.sh build-web.sh src/main.sh" '/ORC_WS/d'
@@ -137,14 +137,16 @@ mutant bug "a player can move the other player's units" src/apply-commands.sh \
     's/ && \${v}unit\.owner == \${!player} {/ {/'
 mutant bug "a player can train at the other player's hall" src/apply-commands.sh \
     's/building\.id == \*\${v}hall && building\.owner == \${!player}/building.id == *${v}hall/'
-mutant bug "positions aren't clamped to the world" src/apply-commands.sh \
-    's/(\*\${v}\([xy]\))\.clamp(0, WORLD_[WH] as i32)/(*${v}\1)/'
+# (no "positions aren't clamped" mutant: since pathfinding, it can't be
+# caught. A hall off the world is refused anyway ("a hall can hang off the
+# world's edge"), and a Move's target is clamped again after its group
+# offset, then moved onto the grid by find-path.)
 mutant bug "a new pawn appears far from its hall" src/apply-commands.sh \
     's/building\.pos + vec2(.*, 48\.0))/building.pos + vec2(400.0, 0.0))/'
 mutant bug "units never move" src/update-units.sh \
     '/\${v}unit\.pos += /d'
 mutant bug "units overshoot instead of stopping at their target" src/update-units.sh \
-    '/\${v}unit\.pos = \${v}unit\.target;/d'
+    '/\${v}unit\.pos = \${v}next;/d'
 mutant bug "the view doesn't scroll right" src/update-scroll.sh \
     '/\${!view}\.x = \${v}unit\.pos\.x - (\${v}map_w - SCROLL_MARGIN);/d'
 mutant bug "spawn spots aren't shuffled" src/world-reset.sh \
@@ -173,6 +175,44 @@ mutant bug "the map name isn't drawn" src/draw-objectives.sh \
     '/draw_text(\${!map_name}/d'
 mutant bug "a done objective isn't greyed" src/draw-objectives.sh \
     's/if \${v}done { GRAY } else { WHITE }/WHITE/'
+
+# ---- terrain and pathfinding ----
+mutant bug "trees don't block the grid" src/world-reset.sh \
+    "s/if \${v}tile == 'T' \&\& /if false \&\& /"
+mutant bug "the offline hall doesn't block its cells" src/world-reset.sh \
+    's/for \${v}cy in \${v}y0\.\.\${v}y1 {/for ${v}cy in 0..0 {/'
+mutant bug "a new hall doesn't block its cells" src/apply-commands.sh \
+    's/\${!grid}\.blocked\[\${v}cy \* \${!grid}\.w + \${v}cx\] = true;/let _ = ();/'
+mutant bug "a hall can go on trees" src/apply-commands.sh \
+    's/ || \${v}on_trees//'
+mutant bug "a hall can go on a unit" src/apply-commands.sh \
+    's/ || \${v}on_unit//'
+mutant bug "a hall can hang off the world's edge" src/apply-commands.sh \
+    's/ || !\${v}in_world//'
+mutant bug "a Move doesn't ask for a path" src/apply-commands.sh \
+    '/\${v}unit\.path\.clear();/{n;d}'
+mutant bug "a new hall doesn't reroute walking units" src/apply-commands.sh \
+    '/if \${v}unit\.pos != \${v}unit\.target {/{n;d}'
+mutant bug "a new pawn can appear under a hall" src/apply-commands.sh \
+    's/if !\${!grid}\.blocked\[\${v}i\] && /if /'
+mutant bug "paths aren't straightened" src/apply-path.sh \
+    's/if \${v}clear {/if false {/'
+mutant bug "straightened paths cut through blocked cells" src/apply-path.sh \
+    's/ && !\${!grid}\.blocked\[\${v}cy as usize \* \${!grid}\.w + \${v}cx as usize\]//'
+mutant bug "a target in the trees isn't moved out" src/apply-path.sh \
+    '/\${!unit}\.target = \${v}points\.last()/d'
+mutant bug "units ignore their waypoints" src/update-units.sh \
+    's/let \${v}next = \${v}unit\.path\.first()\.copied()\.unwrap_or(\${v}unit\.target);/let ${v}next = ${v}unit.target;/'
+mutant bug "the checksum ignores paths" src/world-checksum.sh \
+    '/\${v}unit\.path\.len() as u32,/d; /\${v}words\.extend(\[\${v}point\.x/d'
+mutant bug "trees aren't drawn" src/draw-world.sh \
+    's/if \${v}near {/if false {/'
+mutant bug "trees aren't drawn back to front" src/draw-world.sh \
+    's/(\${v}bottom + \${!view}\.y, \${v}tree,/(0.0, ${v}tree,/'
+mutant bug "trees ignore the view" src/draw-world.sh \
+    's/TILE \/ 2\.0 - 96\.0 - \${!view}\.x,/TILE \/ 2.0 - 96.0,/'
+mutant bug "the minimap leaves out trees" src/draw-minimap.sh \
+    "s/if \${v}tile == 'T' \&\& \${v}x < WORLD_W/if false \&\& \${v}x < WORLD_W/"
 
 # ---- drawing ----
 mutant bug "selection rects ignore the view" src/draw-world.sh \

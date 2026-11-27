@@ -14,6 +14,12 @@ cat << EOF
         blue_hall_co: start_coroutine(load_texture("Buildings/Blue Buildings/Castle.png")),
         red_hall_co: start_coroutine(load_texture("Buildings/Red Buildings/Castle.png")),
         grass_co: start_coroutine(load_texture("Terrain/Tileset/Tilemap_color1.png")),
+        tree_cos: [
+            start_coroutine(load_texture("Terrain/Resources/Wood/Trees/Tree1.png")),
+            start_coroutine(load_texture("Terrain/Resources/Wood/Trees/Tree2.png")),
+            start_coroutine(load_texture("Terrain/Resources/Wood/Trees/Tree3.png")),
+            start_coroutine(load_texture("Terrain/Resources/Wood/Trees/Tree4.png")),
+        ],
     };
 
     let ${v}load_start = get_time();
@@ -26,6 +32,7 @@ cat << EOF
             && ${v}ResCo.blue_hall_co.is_done()
             && ${v}ResCo.red_hall_co.is_done()
             && ${v}ResCo.grass_co.is_done()
+            && ${v}ResCo.tree_cos.iter().all(|co| co.is_done())
         {
             break;
         }
@@ -87,6 +94,12 @@ cat << EOF
             ${v}ResCo.red_hall_co.retrieve().unwrap()?,
         ],
         grass_texture: ${v}ResCo.grass_co.retrieve().unwrap()?,
+        tree_textures: [
+            ${v}ResCo.tree_cos[0].retrieve().unwrap()?,
+            ${v}ResCo.tree_cos[1].retrieve().unwrap()?,
+            ${v}ResCo.tree_cos[2].retrieve().unwrap()?,
+            ${v}ResCo.tree_cos[3].retrieve().unwrap()?,
+        ],
         ui_skin: Skin {
             window_style: ${v}window_style,
             button_style: ${v}button_style,
@@ -102,6 +115,9 @@ cat << EOF
         ${v}texture.set_filter(FilterMode::Nearest);
     }
     ${!resources}.grass_texture.set_filter(FilterMode::Nearest);
+    for ${v}texture in ${!resources}.tree_textures.iter() {
+        ${v}texture.set_filter(FilterMode::Nearest);
+    }
 
     // no build_textures_atlas(): with these large sprite sheets it stopped the
     // macroquad UI menu from drawing, and this game draws few enough sprites without it

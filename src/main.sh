@@ -46,6 +46,16 @@ export ${v}apply_Units=world.units
 export ${v}apply_Buildings=world.buildings
 export ${v}apply_Gold=world.gold
 export ${v}apply_NextId=world.next_id
+export ${v}apply_Grid=world.grid
+export ${v}path_Grid=world.grid
+export ${v}path_Start=path_start
+export ${v}path_Goal=path_goal
+export ${v}path_Path=path_cells
+export ${v}path_Found=path_found
+export ${v}applypath_Unit=world.units[unit_i]
+export ${v}applypath_Cells=path_cells
+export ${v}applypath_Found=path_found
+export ${v}applypath_Grid=world.grid
 export ${v}units_Units=world.units
 export ${v}units_DeltaT=TICK_SECS
 export ${v}obj_Units=world.units
@@ -92,6 +102,8 @@ export ${v}world_Buildings=world.buildings
 export ${v}world_View=world.view
 export ${v}world_HallTextures=resources.hall_textures
 export ${v}world_PawnTextures=resources.pawn_textures
+export ${v}world_Tiles=DEFAULT_MAP.tiles
+export ${v}world_TreeTextures=resources.tree_textures
 export ${v}ghost_Placing=world.placing
 export ${v}ghost_HallTexture=resources.hall_textures[world.me]
 export ${v}dragbox_DragStart=world.drag_start
@@ -99,6 +111,7 @@ export ${v}minimap_Units=world.units
 export ${v}minimap_Buildings=world.buildings
 export ${v}minimap_View=world.view
 export ${v}minimap_Minimap=minimap
+export ${v}minimap_Tiles=DEFAULT_MAP.tiles
 export ${v}drawhud_Units=world.units
 export ${v}drawhud_Buildings=world.buildings
 export ${v}drawhud_Gold=world.gold[world.me]
@@ -135,6 +148,7 @@ EOF
 # between heredocs, not in backticks, so a version mismatch stops the build
 ${ORC_ANIMATE}/models.sh "${ORC_ANIMATE_VERSION}" || exit 1
 ${ORC_WS}/models.sh "${ORC_WS_VERSION}" || exit 1
+${ORC_PATHFINDING}/models.sh "${ORC_PATHFINDING_VERSION}" || exit 1
 
 cat << EOF
 
@@ -151,6 +165,7 @@ cat << EOF
     struct Resources {
         pawn_textures: [[Texture2D; 2]; 2],
         hall_textures: [Texture2D; 2],
+        tree_textures: [Texture2D; 4],
         grass_texture: Texture2D,
         ui_skin: Skin,
     }
@@ -163,6 +178,7 @@ cat << EOF
         blue_hall_co: Coroutine<Result<Texture2D, Error>>,
         red_hall_co: Coroutine<Result<Texture2D, Error>>,
         grass_co: Coroutine<Result<Texture2D, Error>>,
+        tree_cos: [Coroutine<Result<Texture2D, Error>>; 4],
     }
 
     #[macroquad::main("EverKeep")]
@@ -180,6 +196,7 @@ cat << EOF
             next_id: 0,
             outbox: vec![],
             objectives: [0; 2],
+            grid: PathGrid { w: 0, h: 0, blocked: vec![] },
         };
 
         // lockstep: offline games run the same turns, confirmed locally
@@ -402,6 +419,18 @@ cat << EOF
                             Some(turn_cmds) => {
                                 for player in 0..2usize {
                                     ` ./apply-commands.sh ${v}apply_ `
+                                }
+                                // new orders (or a new hall in the way): find
+                                // those units' paths, in unit order
+                                for unit_i in 0..world.units.len() {
+                                    if world.units[unit_i].repath {
+                                        let unit_pos = world.units[unit_i].pos;
+                                        let unit_target = world.units[unit_i].target;
+                                        let path_start = ((unit_pos.x / CELL) as usize, (unit_pos.y / CELL) as usize);
+                                        let path_goal = ((unit_target.x / CELL) as usize, (unit_target.y / CELL) as usize);
+                                        ` ${ORC_PATHFINDING}/snippets/find-path.sh ${v}path_ `
+                                        ` ./apply-path.sh ${v}applypath_ `
+                                    }
                                 }
                                 turn = turn_now;
                                 if online && turn % 50 == 0 {

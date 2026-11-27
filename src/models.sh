@@ -10,11 +10,25 @@ cat << 'EOF'
     const WORLD_W: f32 = 3200.0;
     const WORLD_H: f32 = 2400.0;
 
-    // A map: where players' bases can start. world-reset.sh shuffles the
-    // spawn spots with the game's seed and gives player n the n-th one.
+    // the map's tiles, and the pathfinding grid's cells (2 x 2 to a tile)
+    const TILE: f32 = 64.0;
+    const CELL: f32 = 32.0;
+    const GRID_W: usize = (WORLD_W / CELL) as usize;
+    const GRID_H: usize = (WORLD_H / CELL) as usize;
+    // a tree's trunk stands this far above its picture's bottom, so it looks
+    // rooted in its tile
+    const TREE_BASE: f32 = 24.0;
+
+    // A map: where players' bases can start, and its tiles. world-reset.sh
+    // shuffles the spawn spots with the game's seed and gives player n the
+    // n-th one, so a map needs at least 2.
     struct Map {
         name: &'static str, // shown above the objectives
         spawns: &'static [Vec2],
+        // one row of TILE-sized tiles per string, from the world's top-left:
+        // 'T' is a tree (blocks walking and building), anything else grass.
+        // Tiles past the world's edge are ignored.
+        tiles: &'static [&'static str],
     }
 
     // the default map: one spawn spot near each corner of the world, inset
@@ -26,6 +40,47 @@ cat << 'EOF'
             Vec2::new(WORLD_W - 500.0, 400.0),           // top-right
             Vec2::new(500.0, WORLD_H - 300.0),           // bottom-left
             Vec2::new(WORLD_W - 500.0, WORLD_H - 300.0), // bottom-right
+        ],
+        // trees along the edges, 2 or 3 deep, clear of the spawn spots
+        tiles: &[
+            "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+            "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+            "TT..............T...T..T.T...T..T.T.............TT",
+            "TTT.............................................TT",
+            "TT..............................................TT",
+            "TT.............................................TTT",
+            "TT..............................................TT",
+            "TTT.............................................TT",
+            "TT.............................................TTT",
+            "TT..............................................TT",
+            "TTT............................................TTT",
+            "TT..............................................TT",
+            "TTT.............................................TT",
+            "TT..............................................TT",
+            "TT.............................................TTT",
+            "TT..............................................TT",
+            "TTT.............................................TT",
+            "TT.............................................TTT",
+            "TT..............................................TT",
+            "TTT............................................TTT",
+            "TT..............................................TT",
+            "TTT.............................................TT",
+            "TT..............................................TT",
+            "TT.............................................TTT",
+            "TT..............................................TT",
+            "TTT.............................................TT",
+            "TT.............................................TTT",
+            "TT..............................................TT",
+            "TTT............................................TTT",
+            "TT..............................................TT",
+            "TTT.............................................TT",
+            "TT..............................................TT",
+            "TT.............................................TTT",
+            "TT..............................................TT",
+            "TTT.............................................TT",
+            "TT................T..T.T...T..T.T...............TT",
+            "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+            "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
         ],
     };
 
@@ -87,6 +142,9 @@ cat << 'EOF'
         flip: bool,
         running: bool,
         frame: Rect, // source rect in the sprite sheet; zero-sized until animated
+        // the waypoints to walk through before target, from apply-path.sh
+        path: Vec<Vec2>,
+        repath: bool, // target changed: main.sh finds a new path this turn
     }
 
     struct Building {
@@ -98,9 +156,10 @@ cat << 'EOF'
         selected: bool,
     }
 
-    // Everything the sim changes (units, buildings, gold, next_id, objectives) changes
-    // only through apply-commands.sh, the same way on every player's machine.
-    // The rest is this player's own: selection, placing, the drag and the view.
+    // Everything the sim changes (units, buildings, gold, next_id, objectives,
+    // grid) changes only in the sim snippets, the same way on every player's
+    // machine. The rest is this player's own: selection, placing, the drag
+    // and the view.
     struct World {
         units: Vec<Unit>,
         buildings: Vec<Building>,
@@ -112,6 +171,7 @@ cat << 'EOF'
         next_id: u32,             // the id of the next unit or building
         outbox: Vec<Command>,     // this player's orders, not yet applied
         objectives: [u32; 2],     // per player: the OBJ_ bits they've completed
+        grid: PathGrid,           // GRID_W x GRID_H cells: trees and halls block them
     }
 
     // An order. On the wire: {"op":"move","units":[0,1],"x":740,"y":300}.

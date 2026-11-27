@@ -47,7 +47,7 @@ mutant() { MT_KINDS+=("$1"); MT_NAMES+=("$2"); MT_FILES+=("$3"); MT_SEDS+=("$4")
 for snippet in hud-layout update-hud update-placement update-select update-orders \
     apply-commands update-units update-scroll draw-world draw-placement draw-minimap \
     draw-hud update-unit-frame world-reset world-checksum net-recv net-turn-msg \
-    update-objectives draw-objectives draw-drag-box; do
+    update-objectives draw-objectives draw-drag-box update-minimap-view; do
     mutant missing "${snippet}.sh not written" "src/${snippet}.sh" '/^cat << EOF$/,/^EOF$/d'
 done
 mutant missing "orc websockets not wired in" "orc-env.sh build-web.sh src/main.sh" '/ORC_WS/d'
@@ -107,6 +107,20 @@ mutant bug "a click can pick the other player's unit" src/update-select.sh \
     's/if \${v}unit\.owner == \${!me} && \${v}rect\.contains/if ${v}rect.contains/'
 mutant bug "the drag is in screen space, not world space" src/update-select.sh \
     's/\(\.min(\${v}end_[xy])\) + \${!view}\.[xy],/\1,/'
+mutant bug "a right-click on the minimap orders nothing" src/update-orders.sh \
+    's/(\${v}on_map || \${v}on_minimap)/${v}on_map/'
+mutant bug "a right-click on the minimap orders in screen space" src/update-orders.sh \
+    's/(\${v}mouse - \${!minimap}\.point()) \* (WORLD_W \/ \${!minimap}\.w)/${v}mouse + ${!view}/'
+mutant bug "a right-click on the minimap ignores its scale" src/update-orders.sh \
+    's/ \* (WORLD_W \/ \${!minimap}\.w)//'
+mutant bug "a left click on the minimap doesn't move the view" src/update-minimap-view.sh \
+    's/\${!view} = (/let _ = (/'
+mutant bug "a left click on the minimap doesn't center the view" src/update-minimap-view.sh \
+    's/(\${v}point - \${v}area \/ 2\.0)/(${v}point)/'
+mutant bug "a box drag over the minimap moves the view" src/update-minimap-view.sh \
+    's/ && \${!drag_start}\.is_none()//'
+mutant bug "the view snaps back to walking units off screen" src/update-scroll.sh \
+    's/ && \${v}visible {/ {/'
 mutant bug "right-click orders no units" src/update-orders.sh \
     's/units: \${v}ids,/units: vec![],/'
 

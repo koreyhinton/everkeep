@@ -2,14 +2,14 @@
 
 v=$1
 # maps
-. ${NSMAP}/bind ${v} Units Buildings View
+. ${NSMAP}/bind ${v} Units Buildings View Minimap
 
 cat << EOF
 
     // the whole world, scaled down into the HUD's bottom-left: buildings,
     // units (blue for player 0, red for player 1) and the view's outline
-    let ${v}scale = (HUD_H - 16.0) / WORLD_H;
-    let ${v}map = Rect::new(8.0, screen_height() - HUD_H + 8.0, WORLD_W * ${v}scale, WORLD_H * ${v}scale);
+    let ${v}map = ${!minimap};
+    let ${v}scale = ${v}map.w / WORLD_W;
     let ${v}colors = [Color::from_rgba(80, 140, 255, 255), Color::from_rgba(255, 90, 80, 255)];
     draw_rectangle(${v}map.x, ${v}map.y, ${v}map.w, ${v}map.h, Color::from_rgba(70, 110, 60, 255));
     for ${v}building in ${!buildings}.iter() {

@@ -28,7 +28,8 @@
 # outbox straight away, as the game does offline; online, the game sends it
 # through the lockstep server first (see tests/lockstep.test.sh).
 #
-#   hud-layout.sh        -> BuildButton TrainButton: the HUD buttons' rects
+#   hud-layout.sh        -> BuildButton TrainButton Minimap: the HUD buttons'
+#                        rects, and the minimap's
 #   update-hud.sh        Buildings Gold Placing Outbox Me BuildButton
 #                        TrainButton: "Build Main Hall" sets Placing; "Train
 #                        Pawn" (hall selected) queues TrainPawn. A click on a
@@ -39,11 +40,17 @@
 #   update-select.sh     DragStart Units Buildings View Me: left-drag
 #                        selection of this player's units; units win over
 #                        buildings; a drag can't start on the HUD.
-#   update-orders.sh     Units View Outbox Me: right-click queues Move.
+#   update-orders.sh     Units View Outbox Me Minimap: right-click queues Move,
+#                        on the map or on the minimap (to the world point it
+#                        shows).
+#   update-minimap-view.sh  Minimap View DragStart: holding the left button
+#                        on the minimap centers the view there, unless a box
+#                        drag is under way.
 #   apply-commands.sh    Commands Player Units Buildings Gold NextId
 #   update-units.sh      Units DeltaT: walks units toward their targets.
 #   update-scroll.sh     Units View Me: scrolls the view (the world position
-#                        of the screen's top-left) to follow walking units.
+#                        of the screen's top-left) to follow walking units
+#                        that are on screen.
 #   draw-world.sh        Units Buildings View HallTextures PawnTextures
 #   draw-placement.sh    Placing HallTexture: the ghost, drawn with a color
 #                        alpha below 1.
@@ -69,6 +76,7 @@ v=mn_
 # maps
 export ${v}layout_BuildButton=build_button
 export ${v}layout_TrainButton=train_button
+export ${v}layout_Minimap=minimap
 export ${v}hud_Buildings=world.buildings
 export ${v}hud_Gold=world.gold[world.me]
 export ${v}hud_Placing=world.placing
@@ -88,6 +96,10 @@ export ${v}orders_Units=world.units
 export ${v}orders_View=world.view
 export ${v}orders_Outbox=world.outbox
 export ${v}orders_Me=world.me
+export ${v}orders_Minimap=minimap
+export ${v}mmview_Minimap=minimap
+export ${v}mmview_View=world.view
+export ${v}mmview_DragStart=world.drag_start
 export ${v}apply_Commands=world.outbox
 export ${v}apply_Player=world.me
 export ${v}apply_Units=world.units
@@ -109,6 +121,7 @@ export ${v}ghost_HallTexture=hall_texture
 export ${v}minimap_Units=world.units
 export ${v}minimap_Buildings=world.buildings
 export ${v}minimap_View=world.view
+export ${v}minimap_Minimap=minimap
 export ${v}drawhud_Units=world.units
 export ${v}drawhud_Buildings=world.buildings
 export ${v}drawhud_Gold=world.gold[world.me]
@@ -334,6 +347,7 @@ fn frame(world: &mut World, input: Mouse) -> Vec<Draw> {
     }
     ` ./update-placement.sh ${v}place_ `
     ` ./update-orders.sh ${v}orders_ `
+    ` ./update-minimap-view.sh ${v}mmview_ `
     // offline, this frame's orders apply at once (the game's loopback)
     ` ./apply-commands.sh ${v}apply_ `
     world.outbox.clear();
@@ -708,6 +722,151 @@ fn the_drag_box_outline_draws_every_side() {
         .find(|draw| draw.kind == "rect_lines")
         .expect("no drag box while dragging");
     assert_crisp_outline(&outline, "drag box");
+}
+
+// ---- the minimap: right-click to order, left-click or drag to look ----
+
+// the minimap's rect, from its background (the first rectangle it draws)
+fn minimap_rect(world: &mut World) -> Rect {
+    let draws = frame(world, hover((SCREEN_W / 2.0, SCREEN_H / 2.0)));
+    in_phase(&draws, "minimap")
+        .into_iter()
+        .find(|draw| draw.kind == "rect")
+        .expect("the minimap drew no background")
+        .rect
+}
+
+// the screen point on the minimap that shows this world point
+fn on_minimap(minimap: Rect, world_pos: Vec2) -> (f32, f32) {
+    (minimap.point() + world_pos * (minimap.w / WORLD_W)).into()
+}
+
+// the view that centers this world point in the map area, kept in the world
+fn view_centered_on(world_pos: Vec2) -> Vec2 {
+    let area = vec2(SCREEN_W, SCREEN_H - HUD_H);
+    (world_pos - area / 2.0).clamp(Vec2::ZERO, vec2(WORLD_W, WORLD_H) - area)
+}
+
+// one minimap pixel covers this many world pixels, give or take rounding
+fn minimap_pixel(minimap: Rect) -> f32 {
+    WORLD_W / minimap.w + 1.0
+}
+
+#[test]
+fn right_click_on_the_minimap_walks_units_across_the_world() {
+    let mid = (SCREEN_W / 2.0, SCREEN_H / 2.0);
+    let mut world = World::new();
+    world.units[0].selected = true;
+    let minimap = minimap_rect(&mut world);
+    let goal = vec2(2600.0, 1900.0);
+
+    play(&mut world, right_click(on_minimap(minimap, goal)));
+    // a lone unit stops MOVE_SPACING left of the point (its group grid)
+    let expected = goal - vec2(MOVE_SPACING, 0.0);
+    let target = world.units[0].target;
+    assert!(
+        target.distance(expected) <= minimap_pixel(minimap),
+        "the unit is headed to {target:?}, not near {expected:?}"
+    );
+
+    // it walks all the way there, and the view follows it
+    for _ in 0..1200 {
+        frame(&mut world, hover(mid));
+    }
+    let unit = &world.units[0];
+    assert_eq!(unit.pos, unit.target, "the unit didn't arrive");
+    let on_screen = unit.pos - world.view;
+    assert!(
+        on_screen.x >= 0.0 && on_screen.x <= SCREEN_W && on_screen.y >= 0.0 && on_screen.y <= SCREEN_H - HUD_H,
+        "the view didn't follow the unit (at {on_screen:?} on screen)"
+    );
+}
+
+#[test]
+fn right_click_on_the_minimap_doesnt_depend_on_the_view() {
+    let goal = vec2(2000.0, 600.0);
+    let mut targets = vec![];
+    for view in [Vec2::ZERO, vec2(1000.0, 600.0)] {
+        let mut world = World::new();
+        world.units[0].selected = true;
+        world.view = view;
+        let minimap = minimap_rect(&mut world);
+        play(&mut world, right_click(on_minimap(minimap, goal)));
+        targets.push(world.units[0].target);
+    }
+    assert_eq!(targets[0], targets[1], "the minimap's order moved with the view");
+}
+
+#[test]
+fn right_click_on_the_hud_off_the_minimap_orders_nothing() {
+    let mut world = World::new();
+    world.units[0].selected = true;
+    let minimap = minimap_rect(&mut world);
+    let before = world.units[0].target;
+    let off = (minimap.right() + 40.0, SCREEN_H - 10.0);
+    assert!(!minimap.contains(off.into()));
+    play(&mut world, right_click(off));
+    assert_eq!(world.units[0].target, before, "a right-click on the HUD ordered a move");
+}
+
+#[test]
+fn left_click_on_the_minimap_centers_the_view_there() {
+    let mut world = World::new();
+    world.units[0].selected = true;
+    let minimap = minimap_rect(&mut world);
+    for goal in [vec2(1600.0, 1200.0), vec2(3100.0, 2300.0)] {
+        play(&mut world, left_click(on_minimap(minimap, goal)));
+        let expected = view_centered_on(goal);
+        assert!(
+            world.view.distance(expected) <= minimap_pixel(minimap),
+            "clicking the minimap at {goal:?} put the view at {:?}, not {expected:?}",
+            world.view
+        );
+    }
+    assert!(world.units[0].selected, "clicking the minimap changed the selection");
+    assert_eq!(world.units[0].target, world.units[0].pos, "clicking the minimap ordered a move");
+}
+
+#[test]
+fn dragging_on_the_minimap_pans_the_view() {
+    let mut world = World::new();
+    let minimap = minimap_rect(&mut world);
+    let from = on_minimap(minimap, vec2(1000.0, 800.0));
+    let to = on_minimap(minimap, vec2(2200.0, 1500.0));
+    frame(&mut world, Mouse { pos: from, left_pressed: true, left_down: true, ..Default::default() });
+    let first = world.view;
+    frame(&mut world, Mouse { pos: to, left_down: true, ..Default::default() });
+    assert!(
+        world.view.distance(view_centered_on(vec2(2200.0, 1500.0))) <= minimap_pixel(minimap),
+        "dragging on the minimap didn't follow the mouse (view {:?}, was {first:?})",
+        world.view
+    );
+}
+
+#[test]
+fn a_box_drag_that_crosses_the_minimap_doesnt_move_the_view() {
+    let mut world = World::new();
+    let minimap = minimap_rect(&mut world);
+    let view = world.view;
+    play(&mut world, left_drag((300.0, 200.0), minimap.center().into()));
+    assert_eq!(world.view, view, "a box drag over the minimap moved the view");
+}
+
+#[test]
+fn looking_away_doesnt_snap_back_to_walking_units() {
+    let mid = (SCREEN_W / 2.0, SCREEN_H / 2.0);
+    let mut world = World::new();
+    world.units[0].selected = true;
+    let minimap = minimap_rect(&mut world);
+    // the pawn walks right, then the player looks at the far corner
+    play(&mut world, right_click((SCREEN_W - 10.0, 300.0)));
+    play(&mut world, left_click(on_minimap(minimap, vec2(3000.0, 2200.0))));
+    let looking = world.view;
+    for _ in 0..60 {
+        frame(&mut world, hover(mid));
+    }
+    assert!(world.units[0].running, "the pawn should still be walking");
+    assert_eq!(world.view, looking, "the view snapped back to the walking pawn");
 }
 EOF
 

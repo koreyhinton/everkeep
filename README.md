@@ -18,6 +18,7 @@ A starter RTS. Press Space (or Play) to start, and Escape to pause.
 - **Build Main Hall** (bottom-right, 200 gold): a see-through hall follows the mouse. Left-click to place it, or right-click to cancel.
 - Click your hall (or drag a box over it) to select it, then **Train Pawn** (50 gold) to add a pawn next to it.
 - Click a unit to select it, or drag a box over units to select every one it touches (units win over buildings; clicking empty ground clears the selection), and right-click to move them. The view scrolls to follow them across the world, and the minimap in the HUD's bottom-left shows the whole world and where you're looking.
+- On the minimap, right-click to send your selected units anywhere in the world (the view follows them as they walk), and left-click or drag to look somewhere else.
 - **Objectives** are listed in the bubble in the top-right, under the map's name (the default map is Winter's Edge). The first is to find the rival's main hall: walk a unit near it and it's checked off, for you only. Offline there's no rival player, so an idle red hall stands at the rival's starting spot instead.
 
 ## Multiplayer

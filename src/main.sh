@@ -15,6 +15,7 @@ export ${v}mpreset_Seed=seed
 
 export ${v}layout_BuildButton=build_button
 export ${v}layout_TrainButton=train_button
+export ${v}layout_Minimap=minimap
 export ${v}hud_Buildings=world.buildings
 export ${v}hud_Gold=world.gold[world.me]
 export ${v}hud_Placing=world.placing
@@ -34,6 +35,10 @@ export ${v}orders_Units=world.units
 export ${v}orders_View=world.view
 export ${v}orders_Outbox=world.outbox
 export ${v}orders_Me=world.me
+export ${v}orders_Minimap=minimap
+export ${v}mmview_Minimap=minimap
+export ${v}mmview_View=world.view
+export ${v}mmview_DragStart=world.drag_start
 
 export ${v}apply_Commands=turn_cmds[player]
 export ${v}apply_Player=player
@@ -93,6 +98,7 @@ export ${v}dragbox_DragStart=world.drag_start
 export ${v}minimap_Units=world.units
 export ${v}minimap_Buildings=world.buildings
 export ${v}minimap_View=world.view
+export ${v}minimap_Minimap=minimap
 export ${v}drawhud_Units=world.units
 export ${v}drawhud_Buildings=world.buildings
 export ${v}drawhud_Gold=world.gold[world.me]
@@ -304,6 +310,7 @@ cat << EOF
                     }
                     ` ./update-placement.sh ${v}place_ `
                     ` ./update-orders.sh ${v}orders_ `
+                    ` ./update-minimap-view.sh ${v}mmview_ `
                 }
                 GameState::Paused => {
                     if is_key_pressed(KeyCode::Space) {

@@ -47,7 +47,7 @@ mutant() { MT_KINDS+=("$1"); MT_NAMES+=("$2"); MT_FILES+=("$3"); MT_SEDS+=("$4")
 for snippet in hud-layout update-hud update-placement update-select update-orders \
     apply-commands update-units update-scroll draw-world draw-placement draw-minimap \
     draw-hud update-unit-frame world-reset world-checksum net-recv net-turn-msg \
-    update-objectives draw-objectives; do
+    update-objectives draw-objectives draw-drag-box; do
     mutant missing "${snippet}.sh not written" "src/${snippet}.sh" '/^cat << EOF$/,/^EOF$/d'
 done
 mutant missing "orc websockets not wired in" "orc-env.sh build-web.sh src/main.sh" '/ORC_WS/d'
@@ -73,8 +73,16 @@ mutant bug "the HUD doesn't show what's selected" src/draw-hud.sh \
     's/^\( *\)"\(1 Pawn\|Main Hall\)"\.to_string()/\1"Nothing selected".to_string()/; s/format!("{} Pawns", \${v}pawns)/"Nothing selected".to_string()/'
 mutant bug "the minimap ignores units" src/draw-minimap.sh \
     's/\${v}unit\.pos\.\([xy]\) \* \${v}scale/0.0/'
+mutant bug "the minimap's view outline is 1.0 thick" src/draw-minimap.sh \
+    's/^        2\.0,$/        1.0,/'
+mutant bug "the minimap's view outline is on fractional pixels" src/draw-minimap.sh \
+    's/\(let \${v}view_[a-z]* = .*\)\.round();/\1;/'
+mutant bug "the drag box outline is 1.0 thick" src/draw-drag-box.sh \
+    's/, 2\.0, WHITE);/, 1.0, WHITE);/'
+mutant bug "the drag box outline is on fractional pixels" src/draw-drag-box.sh \
+    's/\.round()//g'
 mutant bug "the minimap ignores the view" src/draw-minimap.sh \
-    's/\${!view}\.\([xy]\) \* \${v}scale/0.0/'
+    's/\${!view}\.[xy]/0.0/g'
 
 # ---- selection and orders ----
 mutant bug "buildings are selected along with units" src/update-select.sh \

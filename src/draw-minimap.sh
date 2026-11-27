@@ -29,12 +29,20 @@ cat << EOF
             ${v}colors[${v}unit.owner.min(1)],
         );
     }
+    // the view's outline, on whole pixels: draw_rectangle_lines draws each
+    // side thickness / 2 inside the rect, so a thinner or fractional side can
+    // fall between pixel centers and not show. Each edge is rounded on its
+    // own so the box doesn't jitter as the view scrolls.
+    let ${v}view_x = (${v}map.x + ${!view}.x * ${v}scale).round();
+    let ${v}view_y = (${v}map.y + ${!view}.y * ${v}scale).round();
+    let ${v}view_right = (${v}map.x + (${!view}.x + screen_width()) * ${v}scale).round();
+    let ${v}view_bottom = (${v}map.y + (${!view}.y + screen_height() - HUD_H) * ${v}scale).round();
     draw_rectangle_lines(
-        ${v}map.x + ${!view}.x * ${v}scale,
-        ${v}map.y + ${!view}.y * ${v}scale,
-        screen_width() * ${v}scale,
-        (screen_height() - HUD_H) * ${v}scale,
-        1.0,
+        ${v}view_x,
+        ${v}view_y,
+        ${v}view_right - ${v}view_x,
+        ${v}view_bottom - ${v}view_y,
+        2.0,
         WHITE,
     );
 

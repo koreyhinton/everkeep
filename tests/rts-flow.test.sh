@@ -48,7 +48,10 @@
 #   draw-placement.sh    Placing HallTexture: the ghost, drawn with a color
 #                        alpha below 1.
 #   draw-minimap.sh      Units Buildings View: changes when buildings, units
-#                        or the view change.
+#                        or the view change. The view's outline is on whole
+#                        pixels, at least 2.0 thick.
+#   draw-drag-box.sh     DragStart: the drag box, outlined like the minimap's
+#                        view.
 #   draw-hud.sh          Units Buildings Gold Placing Me BuildButton
 #                        TrainButton: "Gold: <n>", the buttons (clicking a
 #                        label's text hits its button) and the selection.
@@ -113,6 +116,7 @@ export ${v}drawhud_Placing=world.placing
 export ${v}drawhud_Me=world.me
 export ${v}drawhud_BuildButton=build_button
 export ${v}drawhud_TrainButton=train_button
+export ${v}dragbox_DragStart=world.drag_start
 export ${v}quests_Objectives=world.objectives[world.me]
 export ${v}quests_MapName=DEFAULT_MAP.name
 
@@ -238,9 +242,14 @@ struct Draw {
     texture: String, // draw_texture(_ex)
     rect: Rect,      // position (and size, where the call has one)
     color: Color,
+    thickness: f32, // draw_rectangle_lines (0 for other calls)
 }
 
 fn record(kind: &'static str, text: &str, texture: &str, rect: Rect, color: Color) {
+    record_lines(kind, text, texture, rect, color, 0.0);
+}
+
+fn record_lines(kind: &'static str, text: &str, texture: &str, rect: Rect, color: Color, thickness: f32) {
     let phase = PHASE.with(|phase| *phase.borrow());
     DRAWS.with(|draws| {
         draws.borrow_mut().push(Draw {
@@ -250,6 +259,7 @@ fn record(kind: &'static str, text: &str, texture: &str, rect: Rect, color: Colo
             texture: texture.to_string(),
             rect,
             color,
+            thickness,
         })
     });
 }
@@ -267,8 +277,8 @@ fn draw_rectangle(x: f32, y: f32, w: f32, h: f32, color: Color) {
     record("rect", "", "", Rect::new(x, y, w, h), color);
 }
 
-fn draw_rectangle_lines(x: f32, y: f32, w: f32, h: f32, _thickness: f32, color: Color) {
-    record("rect_lines", "", "", Rect::new(x, y, w, h), color);
+fn draw_rectangle_lines(x: f32, y: f32, w: f32, h: f32, thickness: f32, color: Color) {
+    record_lines("rect_lines", "", "", Rect::new(x, y, w, h), color, thickness);
 }
 
 fn draw_line(x1: f32, y1: f32, x2: f32, y2: f32, _thickness: f32, color: Color) {
@@ -335,6 +345,8 @@ fn frame(world: &mut World, input: Mouse) -> Vec<Draw> {
     ` ./draw-world.sh ${v}world_ `
     PHASE.with(|phase| *phase.borrow_mut() = "placement");
     ` ./draw-placement.sh ${v}ghost_ `
+    PHASE.with(|phase| *phase.borrow_mut() = "dragbox");
+    ` ./draw-drag-box.sh ${v}dragbox_ `
     PHASE.with(|phase| *phase.borrow_mut() = "minimap");
     ` ./draw-minimap.sh ${v}minimap_ `
     PHASE.with(|phase| *phase.borrow_mut() = "hud");
@@ -651,6 +663,51 @@ fn placing_a_hall_on_a_pawn_doesnt_select_the_pawn() {
     play(&mut world, left_click((150.0, 430.0)));
     assert_eq!(world.buildings.len(), 1, "the hall wasn't placed");
     assert!(!world.units[0].selected, "the click that placed the hall selected the pawn");
+}
+
+// macroquad draws each side of draw_rectangle_lines thickness / 2 inside the
+// rect, and a side only shows if it covers pixel centers. On whole pixels
+// and at least 2.0 thick, every side is a full pixel row or column.
+fn assert_crisp_outline(draw: &Draw, what: &str) {
+    let r = draw.rect;
+    for value in [r.x, r.y, r.w, r.h] {
+        assert_eq!(value, value.round(), "the {what} outline {r:?} isn't on whole pixels");
+    }
+    assert!(draw.thickness >= 2.0, "the {what} outline is {} thick, so a side can vanish", draw.thickness);
+}
+
+#[test]
+fn the_minimap_view_outline_draws_every_side() {
+    let mid = (SCREEN_W / 2.0, SCREEN_H / 2.0);
+    let mut world = World::new();
+    // views whose minimap edges land on fractions of a pixel
+    for view in [vec2(0.0, 0.0), vec2(123.0, 77.0), vec2(601.0, 333.0), vec2(1999.0, 1650.0)] {
+        world.view = view;
+        let draws = frame(&mut world, hover(mid));
+        let outline = in_phase(&draws, "minimap")
+            .into_iter()
+            .find(|draw| draw.kind == "rect_lines")
+            .expect("the minimap drew no view outline");
+        assert_crisp_outline(&outline, "minimap view");
+        // still the view, to within the rounding
+        let scale = (HUD_H - 16.0) / WORLD_H;
+        let map_top = SCREEN_H - HUD_H + 8.0;
+        let bottom = map_top + (view.y + SCREEN_H - HUD_H) * scale;
+        assert!((outline.rect.bottom() - bottom).abs() <= 0.5, "the outline's bottom {} isn't the view's {bottom}", outline.rect.bottom());
+    }
+}
+
+#[test]
+fn the_drag_box_outline_draws_every_side() {
+    let mut world = World::new();
+    // fractional mouse positions, as on a scaled display
+    frame(&mut world, Mouse { pos: (300.4, 100.6), left_pressed: true, left_down: true, ..Default::default() });
+    let draws = frame(&mut world, Mouse { pos: (420.7, 211.2), left_down: true, ..Default::default() });
+    let outline = in_phase(&draws, "dragbox")
+        .into_iter()
+        .find(|draw| draw.kind == "rect_lines")
+        .expect("no drag box while dragging");
+    assert_crisp_outline(&outline, "drag box");
 }
 EOF
 

@@ -104,6 +104,18 @@ export ${v}world_HallTextures=resources.hall_textures
 export ${v}world_PawnTextures=resources.pawn_textures
 export ${v}world_Tiles=DEFAULT_MAP.tiles
 export ${v}world_TreeTextures=resources.tree_textures
+export ${v}world_Me=world.me
+export ${v}world_Light=light
+export ${v}fog_Units=world.units
+export ${v}fog_Buildings=world.buildings
+export ${v}fog_Me=world.me
+export ${v}fog_Explored=world.explored
+export ${v}fog_Light=light
+export ${v}fogdraw_Light=light
+export ${v}fogdraw_Explored=world.explored
+export ${v}fogdraw_View=world.view
+export ${v}fogdraw_FogImage=fog_image
+export ${v}fogdraw_FogTexture=fog_texture
 export ${v}ghost_Placing=world.placing
 export ${v}ghost_HallTexture=resources.hall_textures[world.me]
 export ${v}dragbox_DragStart=world.drag_start
@@ -112,6 +124,9 @@ export ${v}minimap_Buildings=world.buildings
 export ${v}minimap_View=world.view
 export ${v}minimap_Minimap=minimap
 export ${v}minimap_Tiles=DEFAULT_MAP.tiles
+export ${v}minimap_Me=world.me
+export ${v}minimap_Light=light
+export ${v}minimap_FogTexture=fog_texture
 export ${v}drawhud_Units=world.units
 export ${v}drawhud_Buildings=world.buildings
 export ${v}drawhud_Gold=world.gold[world.me]
@@ -197,6 +212,7 @@ cat << EOF
             outbox: vec![],
             objectives: [0; 2],
             grid: PathGrid { w: 0, h: 0, blocked: vec![] },
+            explored: vec![],
         };
 
         // lockstep: offline games run the same turns, confirmed locally
@@ -240,6 +256,12 @@ cat << EOF
 
         // one sprite per unit, in step with world.units (units are never removed)
         let mut pawn_sprites: Vec<AnimatedSprite> = vec![];
+
+        // the fog of war's picture: one black pixel per fog cell, whose alpha
+        // draw-fog.sh sets each frame; linear filtering softens its edges
+        let mut fog_image = Image::gen_image_color(FOG_W as u16, FOG_H as u16, BLACK);
+        let fog_texture = Texture2D::from_image(&fog_image);
+        fog_texture.set_filter(FilterMode::Linear);
 
         root_ui().push_skin(&resources.ui_skin);
         let window_size = vec2(370.0, 360.0);
@@ -501,7 +523,9 @@ cat << EOF
                 }
                 GameState::Playing | GameState::Paused => {
                     ` ./draw-ground.sh ${v}ground_ `
+                    ` ./update-fog.sh ${v}fog_ `
                     ` ./draw-world.sh ${v}world_ `
+                    ` ./draw-fog.sh ${v}fogdraw_ `
                     ` ./draw-placement.sh ${v}ghost_ `
                     ` ./draw-drag-box.sh ${v}dragbox_ `
                     ` ./draw-hud.sh ${v}drawhud_ `

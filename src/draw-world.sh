@@ -2,7 +2,7 @@
 
 v=$1
 # maps
-. ${NSMAP}/bind ${v} Units Buildings View HallTextures PawnTextures Tiles TreeTextures
+. ${NSMAP}/bind ${v} Units Buildings View HallTextures PawnTextures Tiles TreeTextures Me Light
 
 cat << EOF
 
@@ -14,11 +14,20 @@ cat << EOF
     let ${v}unit = 1u8;
     let ${v}tree = 2u8;
     let mut ${v}order: Vec<(f32, u8, usize)> = vec![]; // (y, kind, index)
+    // under the fog: a rival building once seen, a rival unit only while the
+    // fog cell at its feet is at least half lit (Light, from update-fog.sh)
     for (${v}i, ${v}b) in ${!buildings}.iter().enumerate() {
-        ${v}order.push((${v}b.pos.y, ${v}building, ${v}i));
+        if ${v}b.owner == ${!me} || ${v}b.seen {
+            ${v}order.push((${v}b.pos.y, ${v}building, ${v}i));
+        }
     }
     for (${v}i, ${v}u) in ${!units}.iter().enumerate() {
-        ${v}order.push((${v}u.pos.y, ${v}unit, ${v}i));
+        let ${v}cell = ((${v}u.pos.y / FOG_CELL) as usize).min(FOG_H - 1) * FOG_W
+            + ((${v}u.pos.x / FOG_CELL) as usize).min(FOG_W - 1);
+        let ${v}in_sight = ${!light}.get(${v}cell).copied().unwrap_or(0.0) >= 0.5;
+        if ${v}u.owner == ${!me} || ${v}in_sight {
+            ${v}order.push((${v}u.pos.y, ${v}unit, ${v}i));
+        }
     }
     // trees near the screen (a tree's picture reaches past its tile on each
     // side, and up to 4 tiles above it); index: row * 4096 + column

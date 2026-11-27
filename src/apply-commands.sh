@@ -66,6 +66,7 @@ cat << EOF
                         pos: ${v}pos,
                         hitbox: HALL_HITBOX,
                         selected: false,
+                        seen: false,
                     });
                     ${!next_id} += 1;
                     for ${v}cy in ${v}y0..${v}y1 {

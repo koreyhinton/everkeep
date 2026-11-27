@@ -2,7 +2,7 @@
 
 v=$1
 # maps
-. ${NSMAP}/bind ${v} Units Buildings View Minimap Tiles
+. ${NSMAP}/bind ${v} Units Buildings View Minimap Tiles Me Light FogTexture
 
 cat << EOF
 
@@ -28,7 +28,20 @@ cat << EOF
             }
         }
     }
-    for ${v}building in ${!buildings}.iter() {
+    // the fog over the ground, then what this player may see on top of it:
+    // their own, rival buildings once seen, rival units in sight (as
+    // draw-world.sh)
+    draw_texture_ex(
+        &${!fog_texture},
+        ${v}map.x,
+        ${v}map.y,
+        WHITE,
+        DrawTextureParams {
+            dest_size: Some(vec2(${v}map.w, ${v}map.h)),
+            ..Default::default()
+        },
+    );
+    for ${v}building in ${!buildings}.iter().filter(|building| building.owner == ${!me} || building.seen) {
         draw_rectangle(
             ${v}map.x + ${v}building.pos.x * ${v}scale - 3.0,
             ${v}map.y + ${v}building.pos.y * ${v}scale - 3.0,
@@ -37,7 +50,11 @@ cat << EOF
             ${v}colors[${v}building.owner.min(1)],
         );
     }
-    for ${v}unit in ${!units}.iter() {
+    for ${v}unit in ${!units}.iter().filter(|unit| {
+        let cell = ((unit.pos.y / FOG_CELL) as usize).min(FOG_H - 1) * FOG_W
+            + ((unit.pos.x / FOG_CELL) as usize).min(FOG_W - 1);
+        unit.owner == ${!me} || ${!light}.get(cell).copied().unwrap_or(0.0) >= 0.5
+    }) {
         draw_circle(
             ${v}map.x + ${v}unit.pos.x * ${v}scale,
             ${v}map.y + ${v}unit.pos.y * ${v}scale,

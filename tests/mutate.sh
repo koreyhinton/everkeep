@@ -47,7 +47,8 @@ mutant() { MT_KINDS+=("$1"); MT_NAMES+=("$2"); MT_FILES+=("$3"); MT_SEDS+=("$4")
 for snippet in hud-layout update-hud update-placement update-select update-orders \
     apply-commands update-units update-scroll draw-world draw-placement draw-minimap \
     draw-hud update-unit-frame world-reset world-checksum net-recv net-turn-msg \
-    update-objectives draw-objectives draw-drag-box update-minimap-view apply-path; do
+    update-objectives draw-objectives draw-drag-box update-minimap-view apply-path \
+    update-fog draw-fog; do
     mutant missing "${snippet}.sh not written" "src/${snippet}.sh" '/^cat << EOF$/,/^EOF$/d'
 done
 mutant missing "orc websockets not wired in" "orc-env.sh build-web.sh src/main.sh" '/ORC_WS/d'
@@ -164,7 +165,7 @@ mutant bug "a player's own hall counts as the rival's" src/update-objectives.sh 
 mutant bug "sight range is ignored" src/update-objectives.sh \
     's/<= SIGHT_RANGE/<= 1e9/'
 mutant bug "the other player's units find the hall" src/update-objectives.sh \
-    's/unit\.owner == \${v}player \&\& {/true \&\& {/'
+    's/if \${v}unit\.owner == \${v}player {/if true {/'
 mutant bug "offline has no rival hall" src/world-reset.sh \
     's/let \${v}playing = .*;/let ${v}playing = true;/'
 mutant bug "the checksum ignores objectives" src/world-checksum.sh \
@@ -213,6 +214,34 @@ mutant bug "trees ignore the view" src/draw-world.sh \
     's/TILE \/ 2\.0 - 96\.0 - \${!view}\.x,/TILE \/ 2.0 - 96.0,/'
 mutant bug "the minimap leaves out trees" src/draw-minimap.sh \
     "s/if \${v}tile == 'T' \&\& \${v}x < WORLD_W/if false \&\& \${v}x < WORLD_W/"
+
+# ---- fog of war ----
+mutant bug "the objective ignores halls' sight" src/update-objectives.sh \
+    's/if \${v}building\.owner == \${v}player {/if false {/'
+mutant bug "sight reaches the whole world" src/update-fog.sh \
+    's/let \${v}reach = SIGHT_RANGE + FOG_FADE \/ 2\.0;/let ${v}reach = 1.0e9;/'
+mutant bug "the fog has no soft edge" src/update-fog.sh \
+    's/ \/ FOG_FADE)\.clamp(0\.0, 1\.0)/ \/ 0.001).clamp(0.0, 1.0)/'
+mutant bug "explored ground is forgotten" src/update-fog.sh \
+    's/\*\${v}cell = \*\${v}cell || \*\${v}lit > 0\.0;/*${v}cell = *${v}lit > 0.0;/'
+mutant bug "halls give no sight" src/update-fog.sh \
+    's/if \${v}building\.owner == \${!me} {/if false {/'
+mutant bug "rival buildings are forgotten" src/update-fog.sh \
+    's/\${v}building\.seen = \${v}building\.seen || /${v}building.seen = /'
+mutant bug "explored ground isn't dimmed" src/draw-fog.sh \
+    's/FOG_DIM \* (1\.0 - \${v}lit)/(1.0 - ${v}lit)/'
+mutant bug "the fog ignores the view" src/draw-fog.sh \
+    's/-\${!view}\.x,/0.0,/'
+mutant bug "rival units in the fog are drawn" src/draw-world.sh \
+    's/if \${v}u\.owner == \${!me} || \${v}in_sight {/if true {/'
+mutant bug "unseen rival buildings are drawn" src/draw-world.sh \
+    's/if \${v}b\.owner == \${!me} || \${v}b\.seen {/if true {/'
+mutant bug "the minimap shows rival units in the fog" src/draw-minimap.sh \
+    's/unit\.owner == \${!me} || \${!light}/true || ${!light}/'
+mutant bug "the minimap shows unseen rival buildings" src/draw-minimap.sh \
+    's/building\.owner == \${!me} || building\.seen/true/'
+mutant bug "the minimap has no fog" src/draw-minimap.sh \
+    's/dest_size: Some(vec2(\${v}map\.w, \${v}map\.h)),/dest_size: Some(vec2(0.0, 0.0)),/'
 
 # ---- drawing ----
 mutant bug "selection rects ignore the view" src/draw-world.sh \
